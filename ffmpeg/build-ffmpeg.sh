@@ -32,7 +32,7 @@ cp -f /dev/null "${LOCAL_MANIFEST}"
   VER="$(git tag | sed -En '/[0-9\.]+$/ s#(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
   git switch -C "${VER}" "tags/${VER}"
   cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
-  meson "../${PKG}" --prefix="${LOCAL_BUILD_PREFIX}" --libdir="${LOCAL_BUILD_PREFIX}/lib" --buildtype release --default-library=static \
+  meson setup "../${PKG}" --prefix="${LOCAL_BUILD_PREFIX}" --libdir="${LOCAL_BUILD_PREFIX}/lib" --buildtype release --default-library=static \
     -Dtests=disabled -Dutilities=disabled
   ninja -j$(nproc) install
   echo "${PKG}: ${VER}" | tee -a "${LOCAL_MANIFEST}" > /dev/null
@@ -47,7 +47,7 @@ cp -f /dev/null "${LOCAL_MANIFEST}"
   VER="$(git tag | sed -En '/[0-9\.]+$/ s#(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
   git switch -C "${VER}" "tags/${VER}"
   cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
-  meson "../${PKG}" --prefix="${LOCAL_BUILD_PREFIX}" --libdir="${LOCAL_BUILD_PREFIX}/lib" --buildtype release --default-library=static \
+  meson setup "../${PKG}" --prefix="${LOCAL_BUILD_PREFIX}" --libdir="${LOCAL_BUILD_PREFIX}/lib" --buildtype release --default-library=static \
     -Denable_tools=false -Denable_tests=false
   ninja -j$(nproc) install
   echo "${PKG}: ${VER}" | tee -a "${LOCAL_MANIFEST}" > /dev/null
@@ -93,9 +93,9 @@ cp -f /dev/null "${LOCAL_MANIFEST}"
   VER="v$(git tag | sed -En '/v[0-9\.]+$/ s#v(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
   git switch -C "${VER}" "tags/${VER}"
   cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
-  meson build "../${PKG}/lib${PKG}" --prefix="${LOCAL_BUILD_PREFIX}" --libdir="${LOCAL_BUILD_PREFIX}/lib" --buildtype release --default-library=static \
+  meson setup "../${PKG}/lib${PKG}" --prefix="${LOCAL_BUILD_PREFIX}" --libdir="${LOCAL_BUILD_PREFIX}/lib" --buildtype release --default-library=static \
     -Denable_tests=false -Denable_docs=false
-  ninja -vC build install
+  ninja -j$(nproc) install
   echo "${PKG}: ${VER}" | tee -a "${LOCAL_MANIFEST}" > /dev/null
 ) &
 
