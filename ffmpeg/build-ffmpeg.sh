@@ -122,10 +122,32 @@ cp -f /dev/null "${LOCAL_MANIFEST}"
   cd "${PKG}" && git clean -fd && git restore . && git fetch
   VER="$(git tag | sed -En '/^[0-9\.]+$/ s#(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
   git switch -C "${VER}" "tags/${VER}"
-  cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
+  #https://github.com/rdp/ffmpeg-windows-build-helpers/issues/185
+  cd .. && rm -rf "${PKG}_build_12bits" && mkdir "${PKG}_build_12bits" && cd "${PKG}_build_12bits"
   cmake "../${PKG}/source" -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${LOCAL_BUILD_PREFIX}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-    -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DSTATIC_LINK_CRT=ON -DHIGH_BIT_DEPTH=ON
-  cmake --build . --parallel $(nproc) --target install
+    -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DSTATIC_LINK_CRT=ON -DEXPORT_C_API=OFF -DHIGH_BIT_DEPTH=ON -DMAIN12=ON
+  cmake --build . --parallel $(nproc)
+  cd .. && rm -rf "${PKG}_build_10bits" && mkdir "${PKG}_build_10bits" && cd "${PKG}_build_10bits"
+  cmake "../${PKG}/source" -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${LOCAL_BUILD_PREFIX}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DSTATIC_LINK_CRT=ON -DEXPORT_C_API=OFF -DHIGH_BIT_DEPTH=ON
+  cmake --build . --parallel $(nproc)
+  cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
+  ln -sf "../${PKG}_build_12bits/libx265.a" libx265_main12.a
+  ln -sf "../${PKG}_build_10bits/libx265.a" libx265_main10.a
+  cmake "../${PKG}/source" -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${LOCAL_BUILD_PREFIX}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DSTATIC_LINK_CRT=ON \
+    -DEXTRA_LIB="x265_main10.a;x265_main12.a" -DEXTRA_LINK_FLAGS=-L. -DLINKED_10BIT=ON -DLINKED_12BIT=ON
+  cmake --build . --parallel $(nproc)
+  mv libx265.a libx265_main.a
+  ar -M <<EOF
+CREATE libx265.a
+ADDLIB libx265_main.a
+ADDLIB libx265_main10.a
+ADDLIB libx265_main12.a
+SAVE
+END
+EOF
+  cmake --install .
   echo "${PKG}: ${VER}" | tee -a "${LOCAL_MANIFEST}" > /dev/null
 
   ## Remove -lstdc++ -lgcc -lgcc_s from x265.pc to honor --static-libstdc++ and --static-libgcc
