@@ -124,7 +124,7 @@ cp -f /dev/null "${LOCAL_MANIFEST}"
   git switch -C "${VER}" "tags/${VER}"
   cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
   cmake "../${PKG}/source" -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${LOCAL_BUILD_PREFIX}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-    -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DSTATIC_LINK_CRT=ON
+    -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DSTATIC_LINK_CRT=ON -DHIGH_BIT_DEPTH=ON
   cmake --build . --parallel $(nproc) --target install
   echo "${PKG}: ${VER}" | tee -a "${LOCAL_MANIFEST}" > /dev/null
 
