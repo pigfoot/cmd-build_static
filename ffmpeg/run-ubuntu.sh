@@ -2,7 +2,7 @@
 
 set -ex
 
-builder=$(buildah from "docker.io/library/ubuntu:lunar")
+builder=$(buildah from "docker.io/library/ubuntu:latest")
 buildah config --workingdir '/io' --env TERM="xterm-256color" "${builder}"
 buildah run "${builder}" sh -c 'sed -Ei "/[ -z \"$PS1\" ] && return/aexport TERM=xterm-256color" ~/.bashrc'
 buildah run "${builder}" sh -c 'apt update -qq && apt upgrade -qq -y && apt install -qq -y apt-utils'
