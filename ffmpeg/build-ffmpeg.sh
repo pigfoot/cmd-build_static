@@ -259,6 +259,7 @@ git switch -C "${VER}"
 sed -Ei \
   -e '/^[[:space:]]*int hide_banner = 0;$/ s#= 0#= 1#' \
   -e '/^[[:space:]]*hide_banner = 1;$/ s#= 1#= 0#' "../${PKG}/fftools/cmdutils.c"
+patch -p1 < <(curl -fsSL https://gitlab.com/AOMediaCodec/SVT-AV1/-/raw/master/.gitlab/workflows/linux/ffmpeg_n7_fix.patch)
 cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
 wait
 
