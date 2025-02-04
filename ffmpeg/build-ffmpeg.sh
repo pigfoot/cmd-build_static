@@ -253,13 +253,13 @@ pushd "/tmp" > /dev/null
 [ ! -d "${PKG}" ] && git clone "${PKG_REPO}"
 cd "${PKG}" && git clean -fd && git restore . && git fetch
 VER="n$(git tag | sed -En '/n[0-9\.]+$/ s#n(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
-git switch -C "${VER}" "${VER}"
+git switch -C "pf-branch"
 #VER="$(git branch -a | sed -En '/\/[0-9\.]+$/ s#.*remotes/origin/release/(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
 #git switch "release/${VER}"
 sed -Ei \
   -e '/^[[:space:]]*int hide_banner = 0;$/ s#= 0#= 1#' \
   -e '/^[[:space:]]*hide_banner = 1;$/ s#= 1#= 0#' "../${PKG}/fftools/cmdutils.c"
-patch -p1 < <(curl -fsSL https://gitlab.com/AOMediaCodec/SVT-AV1/-/raw/master/.gitlab/workflows/linux/ffmpeg_n7_fix.patch)
+#patch -p1 < <(curl -fsSL https://gitlab.com/AOMediaCodec/SVT-AV1/-/raw/master/.gitlab/workflows/linux/ffmpeg_n7_fix.patch)
 cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
 wait
 
