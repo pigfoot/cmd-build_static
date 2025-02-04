@@ -28,7 +28,7 @@ done
   [ ! -d "${PKG}" ] && git clone "${PKG_REPO}"
   cd "${PKG}" && git clean -fd && git restore . && git fetch
   VER="$(git tag | sed -En '/[0-9\.]+$/ s#(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
-  git switch -C "${VER}"
+  git switch -C "${VER}" "${VER}"
   cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
   cmake "../${PKG}" -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${LOCAL_BUILD_PREFIX}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DBUILD_SHARED_LIBS=OFF
@@ -42,7 +42,7 @@ done
   [ ! -d "${PKG}" ] && git clone "${PKG_REPO}"
   cd "${PKG}" && git clean -fd && git restore . && git fetch
   VER="$(git tag | sed -En '/VER-[0-9\-]+$/ s#VER-(.*)#\1#p' | sort -t- -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
-  git switch -C "VER-${VER}"
+  git switch -C "${VER}" "VER-${VER}"
   cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
   PKG_CONFIG_PATH=${LOCAL_BUILD_PREFIX}/lib/pkgconfig meson setup "../${PKG}" --prefix="${LOCAL_BUILD_PREFIX}" --libdir="${LOCAL_BUILD_PREFIX}/lib" --buildtype release --default-library=static \
     -Dtests=disabled
@@ -55,7 +55,7 @@ done
   [ ! -d "${PKG}" ] && git clone "${PKG_REPO}"
   cd "${PKG}" && git clean -fd && git restore . && git fetch
   VER="$(git tag | sed -En '/[0-9\.]+$/ s#(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
-  git switch -C "${VER}"
+  git switch -C "${VER}" "${VER}"
   cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
   PKG_CONFIG_PATH=${LOCAL_BUILD_PREFIX}/lib/pkgconfig meson setup "../${PKG}" --prefix="${LOCAL_BUILD_PREFIX}" --libdir="${LOCAL_BUILD_PREFIX}/lib" --buildtype release --default-library=static \
     -Dtests=disabled -Dutilities=disabled -Dgraphite2=enabled -Dfreetype=enabled
@@ -68,7 +68,7 @@ done
   [ ! -d "${PKG}" ] && git clone "${PKG_REPO}"
   cd "${PKG}" && git clean -fd && git restore . && git fetch
   VER="$(git tag | sed -En '/VER-[0-9\-]+$/ s#VER-(.*)#\1#p' | sort -t- -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
-  git switch -C "VER-${VER}"
+  git switch -C "${VER}" "VER-${VER}"
   cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
   PKG_CONFIG_PATH=${LOCAL_BUILD_PREFIX}/lib/pkgconfig meson setup "../${PKG}" --prefix="${LOCAL_BUILD_PREFIX}" --libdir="${LOCAL_BUILD_PREFIX}/lib" --buildtype release --default-library=static \
     -Dtests=disabled -Dharfbuzz=enabled
@@ -81,7 +81,7 @@ done
   [ ! -d "${PKG}" ] && git clone "${PKG_REPO}"
   cd "${PKG}" && git clean -fd && git restore . && git fetch
   VER="$(git tag | sed -En '/libunibreak_[0-9\-_]+$/ s#libunibreak_(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
-  git switch -C "libunibreak_${VER}"
+  git switch -C "${VER}" "libunibreak_${VER}"
   cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
   PKG_CONFIG_PATH=${LOCAL_BUILD_PREFIX}/lib/pkgconfig "../${PKG}/autogen.sh" \
     --prefix="${LOCAL_BUILD_PREFIX}" --libdir="${LOCAL_BUILD_PREFIX}/lib" --disable-shared --enable-static
@@ -94,7 +94,7 @@ done
   [ ! -d "${PKG}" ] && git clone "${PKG_REPO}"
   cd "${PKG}" && git clean -fd && git restore . && git fetch
   VER="$(git tag | sed -En '/[0-9\.]+$/ s#(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
-  git switch -C "${VER}"
+  git switch -C "${VER}" "${VER}"
   ./autogen.sh && cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
   PKG_CONFIG_PATH=${LOCAL_BUILD_PREFIX}/lib/pkgconfig "../${PKG}/configure" \
     --prefix="${LOCAL_BUILD_PREFIX}" --libdir="${LOCAL_BUILD_PREFIX}/lib" --disable-shared --enable-static \
@@ -110,7 +110,7 @@ done
   [ ! -d "${PKG}" ] && git clone "${PKG_REPO}"
   cd "${PKG}" && git clean -fd && git restore . && git fetch
   VER="$(git tag | sed -En '/[0-9\.]+$/ s#(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
-  git switch -C "${VER}"
+  git switch -C "${VER}" "${VER}"
   cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
   meson setup "../${PKG}" --prefix="${LOCAL_BUILD_PREFIX}" --libdir="${LOCAL_BUILD_PREFIX}/lib" --buildtype release --default-library=static \
     -Denable_tools=false -Denable_tests=false
@@ -125,7 +125,7 @@ done
   [ ! -d "${PKG}" ] && git clone "${PKG_REPO}"
   cd "${PKG}" && git clean -fd && git restore . && git fetch
   VER="$(git tag | sed -En '/^v[0-9\.]+$/ s#(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
-  git switch -C "${VER}"
+  git switch -C "${VER}" "${VER}"
   cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
   cmake "../${PKG}" -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${LOCAL_BUILD_PREFIX}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DENABLE_DOCS=OFF -DENABLE_TESTS=OFF -DENABLE_EXAMPLES=OFF -DENABLE_NASM=ON
@@ -140,7 +140,7 @@ done
   [ ! -d "${PKG}" ] && git clone "${PKG_REPO}"
   cd "${PKG}" && git clean -fd && git restore . && git fetch
   VER="v$(git tag | sed -En '/v[0-9\.]+$/ s#v(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
-  git switch -C "${VER}"
+  git switch -C "${VER}" "${VER}"
   cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
   cmake "../${PKG}" -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${LOCAL_BUILD_PREFIX}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DBUILD_SHARED_LIBS=OFF -DBUILD_DEC=OFF
@@ -155,7 +155,7 @@ done
   [ ! -d "${PKG}" ] && git clone "${PKG_REPO}"
   cd "${PKG}" && git clean -fd && git restore . && git fetch
   VER="v$(git tag | sed -En '/v[0-9\.]+$/ s#v(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
-  git switch -C "${VER}"
+  git switch -C "${VER}" "${VER}"
   cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
   meson setup "../${PKG}/lib${PKG}" --prefix="${LOCAL_BUILD_PREFIX}" --libdir="${LOCAL_BUILD_PREFIX}/lib" --buildtype release --default-library=static \
     -Denable_tests=false -Denable_docs=false
@@ -170,7 +170,7 @@ done
   [ ! -d "${PKG}" ] && git clone "${PKG_REPO}"
   cd "${PKG}" && git clean -fd && git restore . && git fetch
   VER="v$(git tag | sed -En '/v[0-9\.]+$/ s#v(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
-  git switch -C "${VER}"
+  git switch -C "${VER}" "${VER}"
   cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
   "../${PKG}/configure" --prefix="${LOCAL_BUILD_PREFIX}" --libdir="${LOCAL_BUILD_PREFIX}/lib" \
     --disable-examples --disable-unit-tests --enable-vp9-highbitdepth --as=yasm
@@ -185,7 +185,7 @@ done
   [ ! -d "${PKG}" ] && git clone "${PKG_REPO}"
   cd "${PKG}" && git clean -fd && git restore . && git fetch
   VER="$(git tag | sed -En '/^[0-9\.]+$/ s#(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
-  git switch -C "${VER}"
+  git switch -C "${VER}" "${VER}"
   #https://github.com/rdp/ffmpeg-windows-build-helpers/issues/185
   cd .. && rm -rf "${PKG}_build_12bits" && mkdir "${PKG}_build_12bits" && cd "${PKG}_build_12bits"
   cmake "../${PKG}/source" -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${LOCAL_BUILD_PREFIX}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
@@ -225,7 +225,7 @@ EOF
   [ ! -d "${PKG}" ] && git clone "${PKG_REPO}"
   cd "${PKG}" && git clean -fd && git restore . && git fetch
   VER="openssl-$(git tag | sed -En '/openssl-[0-9\.]+$/ s#openssl-(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
-  git switch -C "${VER}"
+  git switch -C "${VER}" "${VER}"
   cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
   "../${PKG}/config" --prefix="${LOCAL_BUILD_PREFIX}" --libdir="lib" no-shared no-autoload-config no-engine no-dso no-deprecated no-legacy
   make -j$(nproc)
@@ -241,7 +241,7 @@ EOF
   [ ! -d "${PKG}" ] && git clone "${PKG_REPO}"
   cd "${PKG}" && git clean -fd && git restore . && git fetch
   VER="n$(git tag | sed -En '/n[0-9\.]+$/ s#n(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
-  git switch -C "${VER}"
+  git switch -C "${VER}" "${VER}"
   cd .. && rm -rf "${PKG}_build" && mkdir "${PKG}_build" && cd "${PKG}_build"
   make -C "../${PKG}" PREFIX="${LOCAL_BUILD_PREFIX}" install
   echo "${PKG}: ${VER}" | tee -a "${LOCAL_MANIFEST}" > /dev/null
@@ -253,7 +253,7 @@ pushd "/tmp" > /dev/null
 [ ! -d "${PKG}" ] && git clone "${PKG_REPO}"
 cd "${PKG}" && git clean -fd && git restore . && git fetch
 VER="n$(git tag | sed -En '/n[0-9\.]+$/ s#n(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
-git switch -C "${VER}"
+git switch -C "${VER}" "${VER}"
 #VER="$(git branch -a | sed -En '/\/[0-9\.]+$/ s#.*remotes/origin/release/(.*)#\1#p' | sort -t. -k 1,1n -k 2,2n -k 3,3n | sed '$!d')"
 #git switch "release/${VER}"
 sed -Ei \
