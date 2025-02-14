@@ -20,150 +20,165 @@ function change_clean_dir() {
   rm -rf "${dir}" && change_dir "${dir}"
 }
 
-function _get_github() {
-  local release_file auth_header status_code size_of
-
-  local repo=$1
-  release_file="github-${repo#*/}.json"
-
-  # GitHub API has a limit of 60 requests per hour, cache the results.
-
-  # get token from github settings
-  auth_header=""
-  set +o xtrace
-  if [ -n "${TOKEN_READ}" ]; then
-    auth_header="token ${TOKEN_READ}"
-  fi
-
-  status_code=$(curl --retry 5 --retry-max-time 120 "https://api.github.com/repos/${repo}/releases" \
-    -w "%{http_code}" \
-    -o "${release_file}" \
-    -H "Authorization: ${auth_header}" \
-    -s -L --compressed)
-
+function enable_trace() {
   set -o xtrace
-  size_of=$(stat -c "%s" "${release_file}")
-  if [ "${size_of}" -lt 200 ] || [ "${status_code}" -ne 200 ]; then
-    echo "The release of ${repo} is empty, download tags instead."
-    set +o xtrace
-    status_code=$(curl --retry 5 --retry-max-time 120 "https://api.github.com/repos/${repo}/tags" \
-      -w "%{http_code}" \
-      -o "${release_file}" \
-      -H "Authorization: ${auth_header}" \
-      -s -L --compressed)
-    set -o xtrace
-  fi
-  auth_header=""
-
-  if [ "${status_code}" -ne 200 ]; then
-    echo "ERROR. Failed to download ${repo} releases from GitHub, status code: ${status_code}"
-    cat "${release_file}"
-    exit 1
-  fi
 }
 
-function _get_latest_tag() {
+function disable_trace() {
   set +o xtrace
+}
+
+function _get_tag() {
+  disable_trace
 
   local ver_exp content tag_verion_map tag_name
   local version="${1}"
-  local tag_type="release"
   content=$(cat -)
 
   ## search releases result from github
 
   ## build a pair of version numbers as tagname__major.minor.patch
   ## for example: curl-8_12_0__8.12.0 or v1.3__1.3. (without patch)
-  ## ver_exp="([^0-9]*([0-9]+)[^0-9]([0-9]+)([^0-9]([0-9]+))?)"
-  ver_exp="(([^0-9]*|[^0-9]+[0-9][^0-9])([0-9]+)[^0-9]([0-9]+)([^0-9]([0-9]+))?)"
+  ver_exp="(([^0-9]*|[^0-9]+[0-9][^0-9])([0-9]+)[^0-9]([0-9]+)([^0-9]([0-9]+))?([^0-9]([0-9]+))?)"
   tag_verion_map=$(echo "${content}" \
-    | sed -En '/"tag_name":/ s#.*: "'"${ver_exp}"'",#\1__\3.\4.\6#p'
+    | sed -En 's#'"${ver_exp}"'#\1__\3.\4.\6.\8#p'
   )
-  if [ -n "${tag_verion_map}" ]; then
-    tag_type="release"
-  else
-    ## search tag result from github
-    tag_verion_map=$(echo "${content}" \
-      | sed -En '/"name":/ s#.*: "'"${ver_exp}"'",#\1__\3.\4.\6#p'
-    )
 
-    if [ -n "${tag_verion_map}" ]; then
-      tag_type="tag"
-    else
-      ## search tag result from git tag
-      tag_verion_map=$(echo "${content}" \
-        | sed -En 's#'"${ver_exp}"'#\1__\3.\4.\6#p'
-      )
-
-      if [ -n "${tag_verion_map}" ]; then
-        tag_type="git"
-      else
-        echo ",,"
-        return
-      fi
-    fi
+  if [ -z "${tag_verion_map}" ]; then
+    echo ","
+    return
   fi
+
+  ## also hard code for aomedia
+  ## https://aomedia.googlesource.com/aom/+refs/tags?format=JSON
+  ## "3gpp-2021-10-15-2__2021.10.15.2"
+  tag_verion_map=$(echo "${tag_verion_map}" | sed -E '/^3gpp-/d')
 
   if [ -z "${version}" ]; then
     version=$(echo "${tag_verion_map%x}" \
       | sed 's#.*__##' \
-      | sort -t. -k 1,1n -k 2,2n -k 3,3n \
+      | sort -t. -k 1,1n -k 2,2n -k 3,3n -k 4,4n\
       | sed '$!d'
     )
   fi
 
-  tag_name="$(echo "${tag_verion_map%x}" | sed -En '/'"${version}"'/ s#__.*##p')"
-  echo "${tag_type},${tag_name},${version}"
+  enable_trace
 
-  set -o xtrace
+  tag_name="$(echo "${tag_verion_map%x}" | sed -En '/__'"${version}"'\.*$/ s#__.*##p')"
+
+  echo "${tag_name},${version}"
 }
 
-function url_from_github() {
-  local browser_download_urls browser_download_url url tag_type tag_name version release_file
-  repo="${1}"
-  version="${2}"
-  release_file="github-${repo#*/}.json"
+function url_from_git_server() {
+  local repo git_srv git_type srv_content srv_rel_url srv_tag_url rel_tag_key rel_dl_key tag_tag_key tag_dl_url
+  local browser_download_urls browser_download_url url result ret_tag ret_ver
+  local repo_url="${1}"
+  local version="${2}"
 
-  if [ ! -f "${release_file}" ]; then
-    _get_github "${repo}"
-  fi
+  git_srv=$(echo "${repo_url}" | sed -E 's#.*//([^/]+)/.*#\1#' | tr '[:upper:]' '[:lower:]')
+  repo=$(echo "${repo_url}" | sed -En 's#.*//[^/]+/(.*)#\1#p' | sed 's#\.git$##')
+  PKG=$(echo "${repo##*/}")
 
-  result=$(cat "${release_file}" | _get_latest_tag "${version}")
-  tag_type=$(echo "$result" | cut -d ',' -f 1)
-  tag_name=$(echo "$result" | cut -d ',' -f 2)
-  version=$(echo "$result" | cut -d ',' -f 3)
-
-  if [ -z "${tag_name}" ]; then
-    tag_name="${version}"
-  fi
-
-  if [ "${tag_type}" = "release" ]; then
-    browser_download_urls=$(cat "${release_file}" \
-      | sed -En '/"browser_download_url":/ s#.*"browser_download_url": "([^"]+(\.gz|\.tgz|\.bz2|\.xz|\.zstd|\.zst))".*#\1#p' \
-      | sed -En '/\/'"${tag_name}"'\//p' \
-      || true)
+  if [[ "${git_srv}" == "github.com" ]]; then
+    git_type="github"
+    srv_rel_url="https://api.github.com/repos/${repo}/releases"
+    srv_tag_url="https://api.github.com/repos/${repo}/tags"
+    rel_tag_key="tag_name"
+    rel_dl_key="browser_download_url"
+    tag_tag_key="name"
+    tag_dl_url="https://github.com/${repo}/archive"
+  elif [[ "${git_srv}" =~ ".googlesource.com" ]]; then
+    git_type="googlesource"
+    srv_rel_url=""
+    srv_tag_url="${repo_url}/+refs/tags?format=JSON"
+    rel_tag_key=""
+    rel_dl_key=""
+    tag_tag_key="name"
+    tag_dl_url="${repo_url}/+archive"
   else
-    browser_download_urls="https://github.com/${repo}/archive/${tag_name}.tar.gz"
+    # gitlab has too many subdomains, so the rest of git server is gitlab
+    # https://code.videolan.org/videolan/dav1d
+    # https://gitlab.freedesktop.org/freetype/freetype
+    git_type="gitlab"
+    srv_rel_url="https://${git_srv}/api/v4/projects/${repo/\//%2F}/releases"
+    srv_tag_url="https://${git_srv}/api/v4/projects/${repo/\//%2F}/repository/tags"
+    rel_tag_key="tag_name"
+    rel_dl_key="url"
+    tag_tag_key="name"
+    tag_dl_url="https://${git_srv}/${repo}/-/archive"
   fi
 
-  if [ -n "${browser_download_urls}" ]; then
-    suffixes="tar.gz tgz"
-    for suffix in ${suffixes}; do
-      browser_download_url=$(printf "%s" "${browser_download_urls}" \
-        | sed -En '/'"${suffix}"'$/p' \
-        | sed '$!d' \
+  ## search release page
+  if [ -n "${srv_rel_url}" ]; then
+    disable_trace
+    srv_content=$(curl -fsSL "${srv_rel_url}")
+    if [ "${git_type}" = "gitlab" ]; then
+      srv_content=$(echo "${srv_content}" | sed -E 's#,#,\n#g')
+    fi
+
+    result=$(echo "${srv_content%x}" \
+      | sed -En '/"'"${rel_tag_key}"'":/ s#.*:[[:blank:]]*"([^"]*)",#\1#p' \
+      | _get_tag "${version}")
+    enable_trace
+
+    ret_tag=$(echo "$result" | cut -d ',' -f 1)
+    ret_ver=$(echo "$result" | cut -d ',' -f 2)
+
+    disable_trace
+    if [ -n "${ret_tag}" ]; then
+      browser_download_urls=$(echo "${srv_content%x}" \
+        | sed -En '/"'"${rel_dl_key}"'":/ s#.*"'"${rel_dl_key}"'":[[:blank:]]*"([^"]+(\.gz|\.tgz|\.bz2|\.xz|\.zstd|\.zst))".*#\1#p' \
+        | sed -En '/\/'"${ret_tag}"'\//p' \
         || true)
-      [ -n "$browser_download_url" ] && break
-    done
+    fi
+    enable_trace
+  fi
 
-    url=$(printf "%s" "${browser_download_url}")
-  else
+  ## search release page failed, search tag page
+  if [ -n "${srv_tag_url}" ] && [ -z "${browser_download_urls}" ]; then
+    disable_trace
+    echo "curl -fsSL ${srv_tag_url}"
+    srv_content=$(curl -fsSL "${srv_tag_url}")
+    if [ "${git_type}" = "gitlab" ]; then
+      srv_content=$(echo "${srv_content}" | sed -E 's#,#,\n#g')
+    elif [ "${git_type}" = "googlesource" ]; then
+      # "v3.1.0": {   ->  "tag_name": "v3.1.0",
+      srv_content=$(echo "${srv_content}" | sed -En '/[[:blank:]]*"[^"]+": \{/ s#.*("[^"]+").*#"'"${tag_tag_key}"'": \1,#p')
+    fi
+
+    result=$(echo "${srv_content%x}" \
+      | sed -En '/"'"${tag_tag_key}"'":/ s#.*:[[:blank:]]*"([^"]*)",#\1#p' \
+      | _get_tag "${version}")
+    enable_trace
+
+    ret_tag=$(echo "$result" | cut -d ',' -f 1)
+    ret_ver=$(echo "$result" | cut -d ',' -f 2)
+
+    disable_trace
+    if [ -n "${ret_tag}" ]; then
+      browser_download_urls="${tag_dl_url}/${ret_tag}.tar.gz"
+    fi
+    enable_trace
+  fi
+
+  if [ -z "${browser_download_urls}" ]; then
     # in case of no browser_download_url in release, try to use the tag name
     # like google/brotli, only contain binary but not source code
-    url="https://github.com/${repo}/archive/${tag_name}.tar.gz"
+    ret_ver="$([ -n "${version}" ] && echo "${version}" || echo "master")"
+    browser_download_urls="${tag_dl_url}/${ret_ver}.tar.gz"
   fi
 
-  URL="${url}"
+  suffixes="tar.gz tgz"
+  for suffix in ${suffixes}; do
+    browser_download_url=$(printf "%s" "${browser_download_urls}" \
+      | sed -En '/'"${suffix}"'$/p' \
+      | sed '$!d' \
+      || true)
+    [ -n "$browser_download_url" ] && break
+  done
+
+  URL="${browser_download_url}"
+  VER="${ret_ver}"
 }
 
 function download_and_extract() {
@@ -178,14 +193,13 @@ function download_and_extract() {
 
 # libunistring
 function build_libunistring() {
-  pkg="libunistring"
   change_dir "${TMP_DIR}"
+  PKG="libunistring"
+  URL="https://mirrors.kernel.org/gnu/libunistring/libunistring-latest.tar.gz"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
 
-  url="https://mirrors.kernel.org/gnu/libunistring/libunistring-latest.tar.gz"
-  download_and_extract "${pkg}" "${url}"
-  change_clean_dir "${pkg}_build"
-
-  PKG_CONFIG_PATH=${ROOT_DIR}/lib/pkgconfig "../${pkg}/configure" \
+  PKG_CONFIG_PATH=${ROOT_DIR}/lib/pkgconfig "../${PKG}/configure" \
     --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --disable-shared --enable-static \
     --disable-rpath --disable-dependency-tracking --enable-year2038
   make -j$(nproc) install
@@ -193,14 +207,13 @@ function build_libunistring() {
 
 # libidn2
 function build_libidn2() {
-  pkg="libidn2"
   change_dir "${TMP_DIR}"
+  PKG="libidn2"
+  URL="https://mirrors.kernel.org/gnu/libidn/libidn2-latest.tar.gz"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
 
-  url="https://mirrors.kernel.org/gnu/libidn/libidn2-latest.tar.gz"
-  download_and_extract "${pkg}" "${url}"
-  change_clean_dir "${pkg}_build"
-
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "../${pkg}/configure" \
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "../${PKG}/configure" \
     --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --disable-shared --enable-static \
     --with-libunistring-prefix="${ROOT_DIR}"
   make -j$(nproc) install
@@ -209,16 +222,12 @@ function build_libidn2() {
 
 # libpsl
 function build_libpsl() {
-  repo_url="https://github.com/rockdaboot/libpsl"
-  repo=$(echo ${repo_url} | sed -En 's#.*//[^/]+/(.*)#\1#p' | sed 's/\.git$//')
-  pkg=$(echo ${repo##*/})
   change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/rockdaboot/libpsl"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
 
-  url_from_github "${repo}" && url="${URL}"
-  download_and_extract "${pkg}" "${url}"
-  change_clean_dir "${pkg}_build"
-
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" meson setup "../${pkg}" \
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" meson setup "../${PKG}" \
     --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --buildtype release --default-library=static \
     -Dbuiltin=true -Druntime=no -Dtests=false
   ninja -j$(nproc) install
@@ -226,18 +235,14 @@ function build_libpsl() {
 
 # openssl
 function build_openssl() {
-  repo_url="https://github.com/openssl/openssl"
-  repo=$(echo ${repo_url} | sed -En 's#.*//[^/]+/(.*)#\1#p' | sed 's/\.git$//')
-  pkg=$(echo ${repo##*/})
   change_dir "${TMP_DIR}"
-
-  url_from_github "${repo}" && url="${URL}"
-  download_and_extract "${pkg}" "${url}"
-  change_clean_dir "${pkg}_build"
+  url_from_git_server "https://github.com/openssl/openssl"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
 
   # no-deprecated would cause TLS-SRP ntlm disable in curl
   # [optional] enable-weak-ssl-ciphers enable-ssl3 enable-ssl3-method
-  "../${pkg}/Configure" --prefix="${ROOT_DIR}" --libdir="lib" \
+  "../${PKG}/Configure" --prefix="${ROOT_DIR}" --libdir="lib" \
     enable-tls1_3 enable-ktls \
     no-shared no-autoload-config no-engine no-dso no-tests no-legacy
   make -j$(nproc)
@@ -246,16 +251,12 @@ function build_openssl() {
 
 # nghttp3
 function build_nghttp3() {
-  repo_url="https://github.com/ngtcp2/nghttp3"
-  repo=$(echo ${repo_url} | sed -En 's#.*//[^/]+/(.*)#\1#p' | sed 's/\.git$//')
-  pkg=$(echo ${repo##*/})
   change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/ngtcp2/nghttp3"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
 
-  url_from_github "${repo}" && url="${URL}"
-  download_and_extract "${pkg}" "${url}"
-  change_clean_dir "${pkg}_build"
-
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${pkg}" \
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
     -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DENABLE_SHARED_LIB=OFF -DENABLE_STATIC_LIB=ON \
     -DBUILD_TESTING=OFF -DENABLE_LIB_ONLY=ON
@@ -264,16 +265,12 @@ function build_nghttp3() {
 
 # nghttp2
 function build_nghttp2() {
-  repo_url="https://github.com/nghttp2/nghttp2"
-  repo=$(echo ${repo_url} | sed -En 's#.*//[^/]+/(.*)#\1#p' | sed 's/\.git$//')
-  pkg=$(echo ${repo##*/})
   change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/nghttp2/nghttp2"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
 
-  url_from_github "${repo}" && url="${URL}"
-  download_and_extract "${pkg}" "${url}"
-  change_clean_dir "${pkg}_build"
-
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${pkg}" \
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
     -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON \
     -DENABLE_DOC=OFF -DENABLE_HTTP3=OFF -DENABLE_LIB_ONLY=ON
@@ -283,16 +280,12 @@ function build_nghttp2() {
 
 # libssh2
 function build_libssh2() {
-  repo_url="https://github.com/libssh2/libssh2"
-  repo=$(echo ${repo_url} | sed -En 's#.*//[^/]+/(.*)#\1#p' | sed 's/\.git$//')
-  pkg=$(echo ${repo##*/})
   change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/libssh2/libssh2"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
 
-  url_from_github "${repo}" && url="${URL}"
-  download_and_extract "${pkg}" "${url}"
-  change_clean_dir "${pkg}_build"
-
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${pkg}" \
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
     -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON \
     -DBUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF -DCRYPTO_BACKEND=OpenSSL -DLIBSSH2_NO_DEPRECATED=ON
@@ -301,33 +294,25 @@ function build_libssh2() {
 
 # zlib
 function build_zlib() {
-  repo_url="https://github.com/madler/zlib"
-  repo=$(echo ${repo_url} | sed -En 's#.*//[^/]+/(.*)#\1#p' | sed 's/\.git$//')
-  pkg=$(echo ${repo##*/})
   change_dir "${TMP_DIR}"
-
-  url_from_github "${repo}" && url="${URL}"
-  download_and_extract "${pkg}" "${url}"
-  change_clean_dir "${pkg}_build"
+  url_from_git_server "https://github.com/madler/zlib"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
 
   # cmake still not support for static library yet (1.3.1)
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "../${pkg}/configure" \
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "../${PKG}/configure" \
     --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --static
   make -j$(nproc) install
 }
 
 # brotli
 function build_brotli() {
-  repo_url="https://github.com/google/brotli"
-  repo=$(echo ${repo_url} | sed -En 's#.*//[^/]+/(.*)#\1#p' | sed 's/\.git$//')
-  pkg=$(echo ${repo##*/})
   change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/google/brotli"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
 
-  url_from_github "${repo}" && url="${URL}"
-  download_and_extract "${pkg}" "${url}"
-  change_clean_dir "${pkg}_build"
-
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${pkg}" \
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
     -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DBUILD_SHARED_LIBS=OFF \
     -DBROTLI_DISABLE_TESTS=ON
@@ -338,16 +323,12 @@ function build_brotli() {
 
 # zstd
 function build_zstd() {
-  repo_url="https://github.com/facebook/zstd"
-  repo=$(echo ${repo_url} | sed -En 's#.*//[^/]+/(.*)#\1#p' | sed 's/\.git$//')
-  pkg=$(echo ${repo##*/})
   change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/facebook/zstd"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
 
-  url_from_github "${repo}" && url="${URL}"
-  download_and_extract "${pkg}" "${url}"
-  change_clean_dir "${pkg}_build"
-
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${pkg}/build/cmake" \
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}/build/cmake" \
     -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DZSTD_BUILD_STATIC=ON -DZSTD_BUILD_SHARED=OFF \
     -DZSTD_LEGACY_SUPPORT=OFF -DZSTD_BUILD_PROGRAMS=OFF -DZSTD_BUILD_TESTS=OFF
@@ -355,16 +336,12 @@ function build_zstd() {
 }
 
 function build_curl() {
-  repo_url="https://github.com/curl/curl"
-  repo=$(echo ${repo_url} | sed -En 's#.*//[^/]+/(.*)#\1#p' | sed 's/\.git$//')
-  pkg=$(echo ${repo##*/})
   change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/curl/curl"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
 
-  url_from_github "${repo}" && url="${URL}"
-  download_and_extract "${pkg}" "${url}"
-  change_clean_dir "${pkg}_build"
-
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "../${pkg}/configure" \
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "../${PKG}/configure" \
     --disable-shared --enable-static \
     --disable-docs \
     --enable-alt-svc \
@@ -452,5 +429,5 @@ function main() {
 # If the first argument is not "--source-only" then run the script,
 # otherwise just provide the functions
 if [ "$1" != "--source-only" ]; then
-    main "$@";
+  main "$@";
 fi
