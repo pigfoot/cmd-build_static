@@ -2,12 +2,19 @@
 
 set -ex
 
-ROOT_DIR="${ROOTDIR:-/sysroot}"
-WORKING_PATH="${WORKING_PATH:-$(pwd)}"
-TMP_DIR="${TMP_DIR:-/tmp}"
+function init_env() {
+  export ROOT_DIR="${ROOTDIR:-/sysroot}"
+  export WORKING_PATH="${WORKING_PATH:-$(pwd)}"
+  export TMP_DIR="${TMP_DIR:-/tmp}"
 
-export CC="${CC:-clang}"
-export CXX="${CC:-clang++}"
+  if [[ -n "${USE_CLANG}" ]] ; then
+    export CC="${CC:-clang}"
+    export CXX="${CXX:-clang++}"
+  else
+    export CC="${CC:-gcc}"
+    export CXX="${CXX:-g++}"
+  fi
+}
 
 function change_dir() {
   local dir="${1}"
@@ -52,7 +59,10 @@ function _get_tag() {
   ## also hard code for aomedia
   ## https://aomedia.googlesource.com/aom/+refs/tags?format=JSON
   ## "3gpp-2021-10-15-2__2021.10.15.2"
-  tag_verion_map=$(echo "${tag_verion_map}" | sed -E '/^3gpp-/d')
+  ## alos procedd the patch version is not integer, like 1.7.0.beta88
+  tag_verion_map=$(echo "${tag_verion_map}" \
+  | sed -E '/^3gpp-/d' \
+  | sed -E '/__[0-9]+\.[0-9]+\.[0-9]+\.[^0-9]+/d')
 
   if [ -z "${version}" ]; then
     version=$(echo "${tag_verion_map%x}" \
@@ -65,6 +75,9 @@ function _get_tag() {
   enable_trace
 
   tag_name="$(echo "${tag_verion_map%x}" | sed -En '/__'"${version}"'\.*$/ s#__.*##p')"
+
+  ## remove redundant dot, for example 4.1,4.1.. -> v4.1,4.1
+  version=$(echo "${version}" | sed -E '/\.+$/ s###')
 
   echo "${tag_name},${version}"
 }
@@ -87,6 +100,14 @@ function url_from_git_server() {
     rel_dl_key="browser_download_url"
     tag_tag_key="name"
     tag_dl_url="https://github.com/${repo}/archive"
+  elif [[ "${git_srv}" == "bitbucket.org" ]]; then
+    git_type="bitbucket"
+    srv_rel_url="" # "https://api.bitbucket.org/2.0/repositories/${repo}/downloads"
+    srv_tag_url="https://api.bitbucket.org/2.0/repositories/${repo}/refs/tags?&sort=-target.date&pagelen=100"
+    rel_tag_key=""
+    rel_dl_key=""
+    tag_tag_key="name"
+    tag_dl_url="https://bitbucket.org/${repo}/get"
   elif [[ "${git_srv}" =~ ".googlesource.com" ]]; then
     git_type="googlesource"
     srv_rel_url=""
@@ -139,7 +160,7 @@ function url_from_git_server() {
     disable_trace
     echo "curl -fsSL ${srv_tag_url}"
     srv_content=$(curl -fsSL "${srv_tag_url}")
-    if [ "${git_type}" = "gitlab" ]; then
+    if [ "${git_type}" = "bitbucket" ] || [ "${git_type}" = "gitlab" ]; then
       srv_content=$(echo "${srv_content}" | sed -E 's#,#,\n#g')
     elif [ "${git_type}" = "googlesource" ]; then
       # "v3.1.0": {   ->  "tag_name": "v3.1.0",
@@ -168,7 +189,8 @@ function url_from_git_server() {
     browser_download_urls="${tag_dl_url}/${ret_ver}.tar.gz"
   fi
 
-  suffixes="tar.gz tgz"
+  #suffixes="tar.zst tar.zstd tar.xz tar.bz2 tar.gz tgz"
+  suffixes="tar.bz2 tar.gz tgz"
   for suffix in ${suffixes}; do
     browser_download_url=$(printf "%s" "${browser_download_urls}" \
       | sed -En '/'"${suffix}"'$/p' \
@@ -182,114 +204,27 @@ function url_from_git_server() {
 }
 
 function download_and_extract() {
-  local url pkg
+  local url pkg uncompressed_flag
 
   pkg="${1}"
   url="${2}"
+  strip_level="${3:-1}"
+
+  # googlesource.com doesn't contain root folder
+  if [[ "${url}" =~ "googlesource.com/" ]]; then
+    strip_level=0
+  fi
+
+  case "${url}" in
+    *.tar.gz|*.tgz) uncompressed_flag=z ;;
+    *.tar.xz) uncompressed_flag=J ;;
+    *.tar.bz2) uncompressed_flag=j ;;
+    *.tar.zst|*.tar.zstd) uncompressed_flag="-I zstd -" ;;
+    *) uncompressed_flag= ;;
+  esac
 
   rm -rf "${pkg}" && mkdir -p "${pkg}" &&
-    curl -fsSL "${url}" | tar zxf - --strip-components=1 -C "${pkg}"
-}
-
-# libunistring
-function build_libunistring() {
-  change_dir "${TMP_DIR}"
-  PKG="libunistring"
-  URL="https://mirrors.kernel.org/gnu/libunistring/libunistring-latest.tar.gz"
-  download_and_extract "${PKG}" "${URL}"
-  change_clean_dir "${PKG}_build"
-
-  PKG_CONFIG_PATH=${ROOT_DIR}/lib/pkgconfig "../${PKG}/configure" \
-    --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --disable-shared --enable-static \
-    --disable-rpath --disable-dependency-tracking --enable-year2038
-  make -j$(nproc) install
-}
-
-# libidn2
-function build_libidn2() {
-  change_dir "${TMP_DIR}"
-  PKG="libidn2"
-  URL="https://mirrors.kernel.org/gnu/libidn/libidn2-latest.tar.gz"
-  download_and_extract "${PKG}" "${URL}"
-  change_clean_dir "${PKG}_build"
-
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "../${PKG}/configure" \
-    --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --disable-shared --enable-static \
-    --with-libunistring-prefix="${ROOT_DIR}"
-  make -j$(nproc) install
-  sed -i -E '/Libs:/ s#-lidn2$#-lidn2 -lunistring#' "${ROOT_DIR}/lib/pkgconfig/libidn2.pc"
-}
-
-# libpsl
-function build_libpsl() {
-  change_dir "${TMP_DIR}"
-  url_from_git_server "https://github.com/rockdaboot/libpsl"
-  download_and_extract "${PKG}" "${URL}"
-  change_clean_dir "${PKG}_build"
-
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" meson setup "../${PKG}" \
-    --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --buildtype release --default-library=static \
-    -Dbuiltin=true -Druntime=no -Dtests=false
-  ninja -j$(nproc) install
-}
-
-# openssl
-function build_openssl() {
-  change_dir "${TMP_DIR}"
-  url_from_git_server "https://github.com/openssl/openssl"
-  download_and_extract "${PKG}" "${URL}"
-  change_clean_dir "${PKG}_build"
-
-  # no-deprecated would cause TLS-SRP ntlm disable in curl
-  # [optional] enable-weak-ssl-ciphers enable-ssl3 enable-ssl3-method
-  "../${PKG}/Configure" --prefix="${ROOT_DIR}" --libdir="lib" \
-    enable-tls1_3 enable-ktls \
-    no-shared no-autoload-config no-engine no-dso no-tests no-legacy
-  make -j$(nproc)
-  make install_sw
-}
-
-# nghttp3
-function build_nghttp3() {
-  change_dir "${TMP_DIR}"
-  url_from_git_server "https://github.com/ngtcp2/nghttp3"
-  download_and_extract "${PKG}" "${URL}"
-  change_clean_dir "${PKG}_build"
-
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
-    -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-    -DENABLE_SHARED_LIB=OFF -DENABLE_STATIC_LIB=ON \
-    -DBUILD_TESTING=OFF -DENABLE_LIB_ONLY=ON
-  cmake --build . --parallel $(nproc) --target install
-}
-
-# nghttp2
-function build_nghttp2() {
-  change_dir "${TMP_DIR}"
-  url_from_git_server "https://github.com/nghttp2/nghttp2"
-  download_and_extract "${PKG}" "${URL}"
-  change_clean_dir "${PKG}_build"
-
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
-    -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-    -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON \
-    -DENABLE_DOC=OFF -DENABLE_HTTP3=OFF -DENABLE_LIB_ONLY=ON
-  cmake --build . --parallel $(nproc) --target install
-}
-
-
-# libssh2
-function build_libssh2() {
-  change_dir "${TMP_DIR}"
-  url_from_git_server "https://github.com/libssh2/libssh2"
-  download_and_extract "${PKG}" "${URL}"
-  change_clean_dir "${PKG}_build"
-
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
-    -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-    -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON \
-    -DBUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF -DCRYPTO_BACKEND=OpenSSL -DLIBSSH2_NO_DEPRECATED=ON
-  cmake --build . --parallel $(nproc) --target install
+    curl -fsSL "${url}" | tar ${uncompressed_flag}xf - --strip-components=${strip_level} -C "${pkg}"
 }
 
 # zlib
@@ -335,13 +270,171 @@ function build_zstd() {
   cmake --build . --parallel $(nproc) --target install
 }
 
+# libunistring
+function build_libunistring() {
+  change_dir "${TMP_DIR}"
+  PKG="libunistring"
+  URL="https://mirrors.kernel.org/gnu/libunistring/libunistring-latest.tar.gz"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  PKG_CONFIG_PATH=${ROOT_DIR}/lib/pkgconfig "../${PKG}/configure" \
+    --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --disable-shared --enable-static \
+    --disable-rpath --disable-dependency-tracking --enable-year2038
+  make -j$(nproc) install
+}
+
+# libidn2
+function build_libidn2() {
+  change_dir "${TMP_DIR}"
+  PKG="libidn2"
+  URL="https://mirrors.kernel.org/gnu/libidn/libidn2-latest.tar.gz"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "../${PKG}/configure" \
+    --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --disable-shared --enable-static \
+    --with-libunistring-prefix="${ROOT_DIR}"
+  make -j$(nproc) install
+  sed -i -E '/Libs:/ s#-lidn2$#-lidn2 -lunistring#' "${ROOT_DIR}/lib/pkgconfig/libidn2.pc"
+}
+
+# libpsl
+function build_libpsl() {
+  change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/rockdaboot/libpsl"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" meson setup "../${PKG}" \
+    --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --buildtype release --default-library=static \
+    -Dbuiltin=true -Druntime=no -Dtests=false
+  ninja -j$(nproc) install
+}
+
+# boringssl
+function build_boringssl() {
+  change_dir "${TMP_DIR}"
+  url_from_git_server "https://boringssl.googlesource.com/boringssl" "chromium-stable"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  [[ ${USE_CLANG} ]] && _CXX_FLAGS="-std=c++17 -stdlib=libc++" || _CXX_FLAGS=""
+
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
+    -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -DCMAKE_CXX_FLAGS="${_CXX_FLAGS}" \
+    -DBUILD_SHARED_LIBS=OFF
+  cmake --build . --parallel $(nproc) --target install
+}
+
+# openssl
+function build_openssl() {
+  change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/openssl/openssl"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  # no-deprecated would cause TLS-SRP ntlm disable in curl
+  # [optional] enable-weak-ssl-ciphers enable-ssl3 enable-ssl3-method
+  "../${PKG}/Configure" --prefix="${ROOT_DIR}" --libdir="lib" \
+    enable-tls1_3 enable-ktls \
+    no-shared no-autoload-config no-engine no-dso no-tests no-legacy
+  make -j$(nproc)
+  make install_sw
+}
+
+# ngtcp2
+function build_ngtcp2() {
+  change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/ngtcp2/ngtcp2"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  BORINGSSL_LIBS="-L/sysroot/lib -lssl -lcrypto" \
+    BORINGSSL_CFLAGS="-I/sysroot/include" \
+    PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "../${PKG}/configure" \
+    --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --disable-shared --enable-static \
+    --with-boringssl
+  make -j$(nproc) install
+}
+
+# nghttp3
+function build_nghttp3() {
+  change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/ngtcp2/nghttp3"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
+    -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -DENABLE_SHARED_LIB=OFF -DENABLE_STATIC_LIB=ON \
+    -DBUILD_TESTING=OFF -DENABLE_LIB_ONLY=ON
+  cmake --build . --parallel $(nproc) --target install
+}
+
+# nghttp2
+function build_nghttp2() {
+  change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/nghttp2/nghttp2"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
+    -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON \
+    -DENABLE_DOC=OFF -DENABLE_HTTP3=OFF -DENABLE_LIB_ONLY=ON
+  cmake --build . --parallel $(nproc) --target install
+}
+
+# libssh2
+function build_libssh2() {
+  change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/libssh2/libssh2"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
+    -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON \
+    -DBUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF -DCRYPTO_BACKEND=OpenSSL -DLIBSSH2_NO_DEPRECATED=ON
+  cmake --build . --parallel $(nproc) --target install
+}
+
 function build_curl() {
   change_dir "${TMP_DIR}"
   url_from_git_server "https://github.com/curl/curl"
   download_and_extract "${PKG}" "${URL}"
   change_clean_dir "${PKG}_build"
 
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "../${PKG}/configure" \
+  ## cmake still cannot build static library for curl with boringssl && libc++
+  #LDFLAGS="-stdlib=libc++ -static-libgcc -static-libstdc++ -lc++" \
+  #  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
+  #  -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+  #  -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON -DBUILD_STATIC_CURL=ON -DOPENSSL_USE_STATIC_LIBS=ON\
+  #  -DUSE_ECH=ON -DCURL_USE_LIBPSL=OFF
+  #cmake --build . --parallel $(nproc) -v
+
+  if [[ ${USE_CLANG} ]]; then
+    _LIBS="-l:libc++.a"
+    _LDFLAGS="-stdlib=libc++ -static-libgcc -static-libstdc++"
+  else
+    _LIBS="-l:libstdc++.a"
+    _LDFLAGS="-static-libgcc -static-libstdc++"
+  fi
+
+  if [[ ${USE_BORINGSSL} ]]; then
+    _ECH="--enable-ech"
+    _QUIC="--without-openssl-quic"
+    _NGTCP2="--with-ngtcp2"
+  else
+    _ECH="--disable-ech"
+    _QUIC="--with-openssl-quic"
+    _NGTCP2="--without-ngtcp2"
+  fi
+
+  LIBS="${_LIBS}" LDFLAGS="${_LDFLAGS}" \
+    PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "../${PKG}/configure" \
     --disable-shared --enable-static \
     --disable-docs \
     --enable-alt-svc \
@@ -352,7 +445,8 @@ function build_curl() {
     --enable-negotiate-auth \
     --enable-aws \
     --enable-dict \
-    --disable-ech \
+    "${_ECH}" \
+    "${_NGTCP2}" \
     --enable-file \
     --enable-ftp \
     --disable-gopher \
@@ -394,7 +488,7 @@ function build_curl() {
     --without-libgsasl \
     --without-msh3 \
     --with-nghttp3 \
-    --with-openssl-quic \
+    "${_QUIC}" \
     --without-quiche \
     --without-schannel \
     --without-secure-transport \
@@ -406,24 +500,34 @@ function build_curl() {
     --without-wolfssl \
     --with-zlib \
     --with-zstd \
-    --with-ssl \
+    --with-ssl=${ROOT_DIR} \
     --with-default-ssl-backend=openssl
-  make -j$(nproc) install
+  make -j$(nproc)
+
+  cp -av "./src/curl" "${WORKING_PATH}"/curl && strip --strip-all "${WORKING_PATH}"/curl
 }
 
 function main() {
+  export USE_BORINGSSL="${USE_BORINGSSL:-1}"
+  export USE_CLANG="${USE_CLANG:-1}"
+
+  init_env;
+
   (build_libunistring && build_libidn2) &
   build_libpsl &
-  (build_openssl && build_nghttp3 && build_nghttp2 && build_libssh2) &
+
+  if [ -n "${USE_BORINGSSL}" ]; then
+    (build_boringssl && build_nghttp3 && build_ngtcp2 && build_nghttp2 && build_libssh2) &
+  else
+    (build_openssl && build_nghttp3 && build_nghttp2 && build_libssh2) &
+  fi
+
   build_zlib &
   build_brotli &
   build_zstd &
   wait
 
   build_curl
-
-  change_dir "${WORKING_PATH}"
-  cp -av /usr/local/bin/curl . && strip --strip-all ./curl
 }
 
 # If the first argument is not "--source-only" then run the script,
