@@ -7,12 +7,12 @@ function init_env() {
   export WORKING_PATH="${WORKING_PATH:-$(pwd)}"
   export TMP_DIR="${TMP_DIR:-/tmp}"
 
-  if [[ -n "${USE_CLANG}" ]] ; then
-    export CC="${CC:-clang}"
-    export CXX="${CXX:-clang++}"
+  if [[ "${WITHOUT_CLANG}" != "yes" ]]; then
+    export CC="${CC:clang}"
+    export CXX="${CXX:clang++}"
   else
-    export CC="${CC:-gcc}"
-    export CXX="${CXX:-g++}"
+    export CC="${CC:gcc}"
+    export CXX="${CXX:g++}"
   fi
 }
 
@@ -190,7 +190,7 @@ function url_from_git_server() {
   fi
 
   #suffixes="tar.zst tar.zstd tar.xz tar.bz2 tar.gz tgz"
-  suffixes="tar.bz2 tar.gz tgz"
+  suffixes="tar.xz tar.bz2 tar.gz tgz"
   for suffix in ${suffixes}; do
     browser_download_url=$(printf "%s" "${browser_download_urls}" \
       | sed -En '/'"${suffix}"'$/p' \
@@ -319,7 +319,7 @@ function build_boringssl() {
   download_and_extract "${PKG}" "${URL}"
   change_clean_dir "${PKG}_build"
 
-  [[ ${USE_CLANG} ]] && _CXX_FLAGS="-std=c++17 -stdlib=libc++" || _CXX_FLAGS=""
+  [[ "${WITHOUT_CLANG}" != "yes" ]] && _CXX_FLAGS="-std=c++17 -stdlib=libc++" || _CXX_FLAGS=""
 
   PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
     -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
@@ -415,7 +415,7 @@ function build_curl() {
   #  -DUSE_ECH=ON -DCURL_USE_LIBPSL=OFF
   #cmake --build . --parallel $(nproc) -v
 
-  if [[ ${USE_CLANG} ]]; then
+  if [[ "${WITHOUT_CLANG}" != "yes" ]]; then
     _LIBS="-l:libc++.a"
     _LDFLAGS="-stdlib=libc++ -static-libgcc -static-libstdc++"
   else
@@ -423,7 +423,7 @@ function build_curl() {
     _LDFLAGS="-static-libgcc -static-libstdc++"
   fi
 
-  if [[ ${USE_BORINGSSL} ]]; then
+  if [[ "${WITHOUT_BORINGSSL}" != "yes" ]]; then
     _ECH="--enable-ech"
     _QUIC="--without-openssl-quic"
     _NGTCP2="--with-ngtcp2"
@@ -508,15 +508,15 @@ function build_curl() {
 }
 
 function main() {
-  export USE_BORINGSSL="${USE_BORINGSSL:-1}"
-  export USE_CLANG="${USE_CLANG:-1}"
+  export WITHOUT_BORINGSSL="${WITHOUT_BORINGSSL:-no}"
+  export WITHOUT_CLANG="${WITHOUT_CLANG:-no}"
 
   init_env;
 
   (build_libunistring && build_libidn2) &
   build_libpsl &
 
-  if [ -n "${USE_BORINGSSL}" ]; then
+  if [[ "${WITHOUT_BORINGSSL}" != "yes" ]]; then
     (build_boringssl && build_nghttp3 && build_ngtcp2 && build_nghttp2 && build_libssh2) &
   else
     (build_openssl && build_nghttp3 && build_nghttp2 && build_libssh2) &
