@@ -18,12 +18,12 @@ buildah run "${builder}" sh -c 'CLANG_VER=$(apt-cache search clang | sed -En "/^
     && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-"${CLANG_VER}" 20 \
        --slave /usr/bin/clang++ clang++ /usr/bin/clang++-"${CLANG_VER}" \
     && update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-"${CLANG_VER}" 20 \
-	   --slave /usr/bin/llvm-ar llvm-ar /usr/bin/llvm-ar-"${CLANG_VER}" \
-	   --slave /usr/bin/llvm-as llvm-as /usr/bin/llvm-as-"${CLANG_VER}" \
-	   --slave /usr/bin/llvm-link llvm-link /usr/bin/llvm-link-"${CLANG_VER}" \
-	   --slave /usr/bin/llvm-nm llvm-nm /usr/bin/llvm-nm-"${CLANG_VER}" \
-	   --slave /usr/bin/llvm-objdump llvm-objdump /usr/bin/llvm-objdump-"${CLANG_VER}" \
-	   --slave /usr/bin/llvm-ranlib llvm-ranlib /usr/bin/llvm-ranlib-"${CLANG_VER}" \
+       --slave /usr/bin/llvm-ar llvm-ar /usr/bin/llvm-ar-"${CLANG_VER}" \
+       --slave /usr/bin/llvm-as llvm-as /usr/bin/llvm-as-"${CLANG_VER}" \
+       --slave /usr/bin/llvm-link llvm-link /usr/bin/llvm-link-"${CLANG_VER}" \
+       --slave /usr/bin/llvm-nm llvm-nm /usr/bin/llvm-nm-"${CLANG_VER}" \
+       --slave /usr/bin/llvm-objdump llvm-objdump /usr/bin/llvm-objdump-"${CLANG_VER}" \
+       --slave /usr/bin/llvm-ranlib llvm-ranlib /usr/bin/llvm-ranlib-"${CLANG_VER}" \
     > /dev/null'
 buildah run "${builder}" sh -c 'apt clean'
 buildah run -v "$(pwd):/io" "${builder}" sh -c './build-ffmpeg.sh'
