@@ -24,7 +24,7 @@ function init_env() {
   libs=(
     libfdk-aac.a libfontconfig.a libfribidi.a libnuma.a
     libvorbisenc.a libmp3lame.a libogg.a libopus.a libvorbis.a libx264.a
-    libexpat.a libuuid.a
+    libexpat.a liblzma.a
   )
   mkdir -p "${ROOT_DIR}/lib"
   for lib in "${libs[@]}"; do
