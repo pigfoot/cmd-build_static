@@ -8,11 +8,17 @@ function init_env() {
   export TMP_DIR="${TMP_DIR:-/tmp}"
 
   if [[ "${WITHOUT_CLANG}" != "yes" ]]; then
-    export CC="${CC:clang}"
-    export CXX="${CXX:clang++}"
+    export CC="${CC:-clang}"
+    export CXX="${CXX:-clang++}"
   else
-    export CC="${CC:gcc}"
-    export CXX="${CXX:g++}"
+    export CC="${CC:-gcc}"
+    export CXX="${CXX:-g++}"
+  fi
+
+  if [ -n "${GITHUB_TOKEN_READ}" ]; then
+    export AUTH_GITHUB="${GITHUB_TOKEN_READ}"
+  else
+    export AUTH_GITHUB=""
   fi
 }
 
@@ -83,7 +89,7 @@ function _get_tag() {
 }
 
 function url_from_git_server() {
-  local repo git_srv git_type srv_content srv_rel_url srv_tag_url rel_tag_key rel_dl_key tag_tag_key tag_dl_url
+  local repo git_srv git_type git_header srv_content srv_rel_url srv_tag_url rel_tag_key rel_dl_key tag_tag_key tag_dl_url
   local browser_download_urls browser_download_url url result ret_tag ret_ver
   local repo_url="${1}"
   local version="${2}"
@@ -91,9 +97,11 @@ function url_from_git_server() {
   git_srv=$(echo "${repo_url}" | sed -E 's#.*//([^/]+)/.*#\1#' | tr '[:upper:]' '[:lower:]')
   repo=$(echo "${repo_url}" | sed -En 's#.*//[^/]+/(.*)#\1#p' | sed 's#\.git$##')
   PKG=$(echo "${repo##*/}")
+  git_header=()
 
   if [[ "${git_srv}" == "github.com" ]]; then
     git_type="github"
+    [[ -n "${AUTH_GITHUB}" ]] && git_header+=(-H "Authorization: ${AUTH_GITHUB}")
     srv_rel_url="https://api.github.com/repos/${repo}/releases"
     srv_tag_url="https://api.github.com/repos/${repo}/tags"
     rel_tag_key="tag_name"
@@ -132,7 +140,7 @@ function url_from_git_server() {
   ## search release page
   if [ -n "${srv_rel_url}" ]; then
     disable_trace
-    srv_content=$(curl -fsSL "${srv_rel_url}")
+    srv_content=$(curl "${git_header[@]}" -fsSL "${srv_rel_url}")
     if [ "${git_type}" = "gitlab" ]; then
       srv_content=$(echo "${srv_content}" | sed -E 's#,#,\n#g')
     fi
@@ -158,8 +166,7 @@ function url_from_git_server() {
   ## search release page failed, search tag page
   if [ -n "${srv_tag_url}" ] && [ -z "${browser_download_urls}" ]; then
     disable_trace
-    echo "curl -fsSL ${srv_tag_url}"
-    srv_content=$(curl -fsSL "${srv_tag_url}")
+    srv_content=$(curl "${git_header[@]}" -fsSL "${srv_tag_url}")
     if [ "${git_type}" = "bitbucket" ] || [ "${git_type}" = "gitlab" ]; then
       srv_content=$(echo "${srv_content}" | sed -E 's#,#,\n#g')
     elif [ "${git_type}" = "googlesource" ]; then
@@ -204,18 +211,29 @@ function url_from_git_server() {
 }
 
 function download_and_extract() {
-  local url pkg uncompressed_flag
+  local pkg dl_url git_srv git_header strip_level uncompressed_flag 
 
   pkg="${1}"
-  url="${2}"
+  dl_url="${2}"
   strip_level="${3:-1}"
 
-  # googlesource.com doesn't contain root folder
-  if [[ "${url}" =~ "googlesource.com/" ]]; then
+  git_srv=$(echo "${dl_url}" | sed -E 's#.*//([^/]+)/.*#\1#' | tr '[:upper:]' '[:lower:]')
+  git_header=()
+
+  if [[ "${git_srv}" =~ "github.com" ]]; then
+    git_type="github"
+    [[ -n "${AUTH_GITHUB}" ]] && git_header+=(-H "Authorization: ${AUTH_GITHUB}")
+  elif [[ "${git_srv}" =~ "bitbucket.org" ]]; then
+    git_type="bitbucket"
+  elif [[ "${git_srv}" =~ ".googlesource.com" ]]; then
+    git_type="googlesource"
+    # googlesource.com doesn't contain root folder
     strip_level=0
+  else
+    git_type="gitlab"
   fi
 
-  case "${url}" in
+  case "${dl_url}" in
     *.tar.gz|*.tgz) uncompressed_flag=z ;;
     *.tar.xz) uncompressed_flag=J ;;
     *.tar.bz2) uncompressed_flag=j ;;
@@ -223,8 +241,9 @@ function download_and_extract() {
     *) uncompressed_flag= ;;
   esac
 
-  rm -rf "${pkg}" && mkdir -p "${pkg}" &&
-    curl -fsSL "${url}" | tar ${uncompressed_flag}xf - --strip-components=${strip_level} -C "${pkg}"
+  rm -rf "${pkg}" && mkdir -p "${pkg}"
+  curl "${git_header[@]}" -fsSL "${dl_url}" \
+    | tar ${uncompressed_flag}xf - --strip-components=${strip_level} -C "${pkg}"
 }
 
 # zlib

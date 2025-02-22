@@ -24,5 +24,6 @@ buildah run "${builder}" sh -c 'CLANG_VER=$(apt-cache search clang | sed -En "/^
 	   --slave /usr/bin/llvm-ranlib llvm-ranlib /usr/bin/llvm-ranlib-"${CLANG_VER}" \
     > /dev/null'
 buildah run "${builder}" sh -c 'apt clean'
-buildah run -v "$(pwd):/io" "${builder}" sh -c './build-curl.sh'
+buildah run -v "$(pwd):/io" "${builder}" sh -c 'GITHUB_TOKEN_READ='${GITHUB_TOKEN_READ}' \
+    ./build-curl.sh'
 buildah rm "${builder}"
