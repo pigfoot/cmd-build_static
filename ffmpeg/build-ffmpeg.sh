@@ -24,7 +24,7 @@ function init_env() {
   libs=(
     libfdk-aac.a libfontconfig.a libfribidi.a libnuma.a
     libvorbisenc.a libmp3lame.a libogg.a libopus.a libvorbis.a libx264.a
-    libexpat.a liblzma.a
+    libexpat.a
   )
   mkdir -p "${ROOT_DIR}/lib"
   for lib in "${libs[@]}"; do
@@ -287,6 +287,20 @@ function build_brotli() {
   sed -i -E '/Libs:/ s#-lbrotlienc$#-lbrotlienc -lbrotlicommon#' "${ROOT_DIR}/lib/pkgconfig/libbrotlienc.pc"
 }
 
+# liblzma
+function build_liblzma() {
+  change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/tukaani-project/xz"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
+    -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DXZ_DOC=OFF -DXZ_TOOL_XZ=OFF -DXZ_TOOL_SCRIPTS=OFF -DXZ_TOOL_XZDEC=OFF -DXZ_TOOL_LZMADEC=OFF -DXZ_TOOL_LZMAINFO=OFF 
+  cmake --build . --parallel $(nproc) --target install
+}
+
 # libbz2
 function build_libbz2() {
   change_dir "${TMP_DIR}"
@@ -547,13 +561,14 @@ function build_ffmpeg() {
   url_from_git_server "https://github.com/FFmpeg/FFmpeg" "master"
   download_and_extract "${PKG}" "${URL}"
 
-  change_dir "${PKG}"
+  pushd "${PKG}" > /dev/null
   sed -Ei \
     -e '/^[[:space:]]*int hide_banner = 0;$/ s#= 0#= 1#' \
     -e '/^[[:space:]]*hide_banner = 1;$/ s#= 1#= 0#' "./fftools/cmdutils.c"
   #patch -p1 < <(curl -fsSL https://gitlab.com/AOMediaCodec/SVT-AV1/-/raw/master/.gitlab/workflows/linux/ffmpeg_n7_fix.patch)
+  popd > /dev/null
 
-  change_clean_dir "../${PKG}_build"
+  change_clean_dir "${PKG}_build"
 #   --ld="c++" --extra-ldflags="-static-libgcc -static-libstdc++ -L${ROOT_DIR}/lib" \
 #  --cc="clang" --cxx="clang++" --ar="llvm-ar" --ranlib="llvm-ranlib" --ld="clang++"
 
@@ -564,6 +579,7 @@ function build_ffmpeg() {
     --disable-doc --enable-pic \
     --extra-cflags="-I${ROOT_DIR}/include" \
     --ld="${CXX}" --extra-ldflags="-static-libgcc -static-libstdc++ -L${ROOT_DIR}/lib" \
+    --enable-zlib --enable-bzlib --enable-lzma \
     --enable-libass \
     --enable-libaom \
     --enable-libdav1d \
@@ -593,6 +609,7 @@ function main() {
 
   (build_zlib && build_libpng) &
   build_libbz2 &
+  build_liblzma &
   build_brotli &
   wait
 
