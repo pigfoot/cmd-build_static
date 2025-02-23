@@ -551,7 +551,7 @@ function build_ffmpeg() {
   sed -Ei \
     -e '/^[[:space:]]*int hide_banner = 0;$/ s#= 0#= 1#' \
     -e '/^[[:space:]]*hide_banner = 1;$/ s#= 1#= 0#' "./fftools/cmdutils.c"
-  patch -p1 < <(curl -fsSL https://gitlab.com/AOMediaCodec/SVT-AV1/-/raw/master/.gitlab/workflows/linux/ffmpeg_n7_fix.patch)
+  #patch -p1 < <(curl -fsSL https://gitlab.com/AOMediaCodec/SVT-AV1/-/raw/master/.gitlab/workflows/linux/ffmpeg_n7_fix.patch)
 
   change_clean_dir "../${PKG}_build"
 #   --ld="c++" --extra-ldflags="-static-libgcc -static-libstdc++ -L${ROOT_DIR}/lib" \
