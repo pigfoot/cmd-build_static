@@ -2,7 +2,7 @@
 
 set -ex
 
-builder=$(buildah from "docker.io/library/ubuntu:latest")
+builder=$(buildah from "docker.io/library/ubuntu:${CNTR_VER:-latest}")
 buildah config --workingdir '/io' --env TERM="xterm-256color" "${builder}"
 buildah run "${builder}" sh -c 'sed -Ei "/[ -z \"$PS1\" ] && return/aexport TERM=xterm-256color" ~/.bashrc'
 buildah run "${builder}" sh -c 'apt update -qq && apt upgrade -qq -y && apt install -qq -y apt-utils whiptail'
@@ -29,5 +29,6 @@ buildah run -v "$(pwd):/io" "${builder}" sh -c ' \
   GITHUB_TOKEN_READ='${GITHUB_TOKEN_READ}' \
   WITHOUT_BORINGSSL='${WITHOUT_BORINGSSL}' \
   WITHOUT_CLANG='${WITHOUT_CLANG}' \
+  EXTRA_CFLAGS='${EXTRA_CFLAGS}' \
   ./build-ffmpeg.sh'
 buildah rm "${builder}"

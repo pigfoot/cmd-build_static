@@ -21,6 +21,11 @@ function init_env() {
     export AUTH_GITHUB=""
   fi
 
+  if [ -n "${EXTRA_CFLAGS}" ]; then
+    export CFLAGS="${EXTRA_CFLAGS}"
+    export CXXFLAGS="${EXTRA_CFLAGS}"
+  fi
+
   libs=(
     libfdk-aac.a libfontconfig.a libfribidi.a libnuma.a
     libvorbisenc.a libmp3lame.a libogg.a libopus.a libvorbis.a libx264.a
@@ -568,6 +573,8 @@ function build_ffmpeg() {
   #patch -p1 < <(curl -fsSL https://gitlab.com/AOMediaCodec/SVT-AV1/-/raw/master/.gitlab/workflows/linux/ffmpeg_n7_fix.patch)
   popd > /dev/null
 
+  [[ "${WITHOUT_CLANG}" != "yes" ]] && _CUDA_LLVM="--enable-cuda-llvm" || _CUDA_LLVM="--disable-cuda-llvm"
+
   change_clean_dir "${PKG}_build"
 #   --ld="c++" --extra-ldflags="-static-libgcc -static-libstdc++ -L${ROOT_DIR}/lib" \
 #  --cc="clang" --cxx="clang++" --ar="llvm-ar" --ranlib="llvm-ranlib" --ld="clang++"
@@ -577,7 +584,7 @@ function build_ffmpeg() {
     --enable-gpl --enable-nonfree --enable-version3 \
     --extra-version=$(date +%Y%m%d) \
     --disable-doc --enable-pic \
-    --extra-cflags="-I${ROOT_DIR}/include" \
+    --extra-cflags="-I${ROOT_DIR}/include ${CFLAGS}" \
     --ld="${CXX}" --extra-ldflags="-static-libgcc -static-libstdc++ -L${ROOT_DIR}/lib" \
     --enable-zlib --enable-bzlib --enable-lzma \
     --enable-libass \
@@ -588,7 +595,7 @@ function build_ffmpeg() {
     --enable-libopus \
     --enable-cross-compile \
     --enable-libsvtav1 \
-    --disable-cuda-llvm --enable-ffnvcodec \
+    "${_CUDA_LLVM}" --enable-ffnvcodec \
     --enable-libvmaf \
     --enable-libvorbis \
     --enable-libvpx \
