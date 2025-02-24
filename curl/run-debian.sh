@@ -25,8 +25,9 @@ buildah run "${builder}" sh -c 'DEBIAN_FRONTEND=noninteractive apt install -qq -
   > /dev/null'
 buildah run "${builder}" sh -c 'apt clean'
 buildah run -v "$(pwd):/io" "${builder}" sh -c ' \
-  GITHUB_TOKEN_READ='${GITHUB_TOKEN_READ}' \
-  WITHOUT_BORINGSSL='${WITHOUT_BORINGSSL}' \
-  WITHOUT_CLANG='${WITHOUT_CLANG}' \
+  GITHUB_TOKEN_READ="'"${GITHUB_TOKEN_READ}"'" \
+  WITHOUT_BORINGSSL="'"${WITHOUT_BORINGSSL}"'" \
+  WITHOUT_CLANG="'"${WITHOUT_CLANG}"'" \
+  EXTRA_CFLAGS="'"${EXTRA_CFLAGS}"'" \
   ./build-curl.sh'
 buildah rm "${builder}"

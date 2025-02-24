@@ -585,7 +585,7 @@ function build_ffmpeg() {
     --extra-version=$(date +%Y%m%d) \
     --disable-doc --enable-pic \
     --extra-cflags="-I${ROOT_DIR}/include ${CFLAGS}" \
-    --ld="${CXX}" --extra-ldflags="-static-libgcc -static-libstdc++ -L${ROOT_DIR}/lib" \
+    --cc="${CC}" --ld="${CXX}" --extra-ldflags="-static-libgcc -static-libstdc++ -L${ROOT_DIR}/lib" \
     --enable-zlib --enable-bzlib --enable-lzma \
     --enable-libass \
     --enable-libaom \

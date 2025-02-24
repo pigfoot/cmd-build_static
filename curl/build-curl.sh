@@ -20,6 +20,11 @@ function init_env() {
   else
     export AUTH_GITHUB=""
   fi
+
+  if [ -n "${EXTRA_CFLAGS}" ]; then
+    export CFLAGS="${EXTRA_CFLAGS}"
+    export CXXFLAGS="${EXTRA_CFLAGS}"
+  fi
 }
 
 function change_dir() {
