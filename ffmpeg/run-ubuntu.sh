@@ -8,7 +8,7 @@ buildah run "${builder}" sh -c 'sed -Ei "/[ -z \"$PS1\" ] && return/aexport TERM
 buildah run "${builder}" sh -c 'apt update -qq && apt upgrade -qq -y && apt install -qq -y apt-utils whiptail'
 buildah run "${builder}" sh -c 'DEBIAN_FRONTEND=noninteractive apt install -qq -y \
   autoconf libtool binutils pkg-config cmake meson \
-  curl nasm yasm \
+  curl nasm yasm xxd \
   libfribidi-dev libfontconfig-dev libnuma-dev \
   libvorbis-dev libmp3lame-dev libfdk-aac-dev libopus-dev libx264-dev libswscale-dev \
   > /dev/null'
