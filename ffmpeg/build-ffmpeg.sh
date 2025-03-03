@@ -39,6 +39,12 @@ function init_env() {
   done
 }
 
+if [ "$(uname)" == "Darwin" ]; then
+function nproc() {
+  sysctl -n hw.logicalcpu
+}
+fi
+
 function change_dir() {
   local dir="${1}"
   mkdir -p "${dir}"

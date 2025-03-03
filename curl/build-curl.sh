@@ -27,6 +27,12 @@ function init_env() {
   fi
 }
 
+if [ "$(uname)" == "Darwin" ]; then
+function nproc() {
+  sysctl -n hw.logicalcpu
+}
+fi
+
 function change_dir() {
   local dir="${1}"
   mkdir -p "${dir}"
@@ -375,8 +381,8 @@ function build_ngtcp2() {
   download_and_extract "${PKG}" "${URL}"
   change_clean_dir "${PKG}_build"
 
-  BORINGSSL_LIBS="-L/sysroot/lib -lssl -lcrypto" \
-    BORINGSSL_CFLAGS="-I/sysroot/include" \
+  BORINGSSL_LIBS="-L${ROOT_DIR}/lib -lssl -lcrypto" \
+    BORINGSSL_CFLAGS="-I${ROOT_DIR}/include" \
     PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "../${PKG}/configure" \
     --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --disable-shared --enable-static \
     --with-boringssl
