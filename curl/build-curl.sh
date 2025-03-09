@@ -3,7 +3,7 @@
 set -ex
 
 function init_env() {
-  export ROOT_DIR="${ROOTDIR:-/sysroot}"
+  export ROOT_DIR="${ROOT_DIR:-/sysroot}"
   export WORKING_PATH="${WORKING_PATH:-$(pwd)}"
   export TMP_DIR="${TMP_DIR:-/tmp}"
 
@@ -27,9 +27,17 @@ function init_env() {
   fi
 }
 
+if [ "$(uname)" == "Linux" ]; then
+  STRIP_FLAGS="--strip-all"
+fi
+
 if [ "$(uname)" == "Darwin" ]; then
 function nproc() {
   sysctl -n hw.logicalcpu
+}
+
+function sed() {
+  gsed "$@"
 }
 fi
 
@@ -222,7 +230,7 @@ function url_from_git_server() {
 }
 
 function download_and_extract() {
-  local pkg dl_url git_srv git_header strip_level uncompressed_flag 
+  local pkg dl_url git_srv git_header strip_level uncompressed_flag
 
   pkg="${1}"
   dl_url="${2}"
@@ -381,12 +389,29 @@ function build_ngtcp2() {
   download_and_extract "${PKG}" "${URL}"
   change_clean_dir "${PKG}_build"
 
-  BORINGSSL_LIBS="-L${ROOT_DIR}/lib -lssl -lcrypto" \
-    BORINGSSL_CFLAGS="-I${ROOT_DIR}/include" \
-    PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "../${PKG}/configure" \
-    --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --disable-shared --enable-static \
-    --with-boringssl
-  make -j$(nproc) install
+  command=(
+    cmake "../${PKG}" -G"Ninja"
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    -DENABLE_SHARED_LIB=OFF -DENABLE_STATIC_LIB=ON
+    -DBUILD_TESTING=OFF
+  )
+
+  if [[ "${WITHOUT_BORINGSSL}" != "yes" ]]; then
+    [[ "${WITHOUT_CLANG}" != "yes" ]] && _LIBS="-lc++" || _LIBS="-lstdc++"
+
+    command+=(
+      -DENABLE_BORINGSSL=ON -DENABLE_OPENSSL=OFF
+      -DBORINGSSL_INCLUDE_DIR="${ROOT_DIR}/include"
+      -DBORINGSSL_LIBRARIES="-L${ROOT_DIR}/lib -lssl -lcrypto ${_LIBS}"
+    )
+  else
+    command+=(
+      -DENABLE_BORINGSSL=OFF -DENABLE_OPENSSL=ON
+    )
+  fi
+
+  echo ${command} && PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "${command[@]}"
+  cmake --build . --parallel $(nproc) --target install
 }
 
 # nghttp3
@@ -426,34 +451,30 @@ function build_libssh2() {
 
   PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
     -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-    -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON \
+    -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON -DOPENSSL_ROOT_DIR="${ROOT_DIR}" \
+    -DZLIB_INCLUDE_DIR="${ROOT_DIR}/include" -DZLIB_LIBRARY="${ROOT_DIR}/lib/libz.a" \
     -DBUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF -DCRYPTO_BACKEND=OpenSSL -DLIBSSH2_NO_DEPRECATED=ON
   cmake --build . --parallel $(nproc) --target install
 }
 
-function build_curl() {
+function build_curl_autoconf() {
   change_dir "${TMP_DIR}"
   url_from_git_server "https://github.com/curl/curl"
   download_and_extract "${PKG}" "${URL}"
   change_clean_dir "${PKG}_build"
 
-  ## cmake still cannot build static library for curl with boringssl && libc++
-  #LDFLAGS="-stdlib=libc++ -static-libgcc -static-libstdc++ -lc++" \
-  #  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
-  #  -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-  #  -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON -DBUILD_STATIC_CURL=ON -DOPENSSL_USE_STATIC_LIBS=ON\
-  #  -DUSE_ECH=ON -DCURL_USE_LIBPSL=OFF
-  #cmake --build . --parallel $(nproc) -v
-
-  if [[ "${WITHOUT_CLANG}" != "yes" ]]; then
-    _LIBS="-l:libc++.a"
-    _LDFLAGS="-stdlib=libc++ -static-libgcc -static-libstdc++"
-  else
-    _LIBS="-l:libstdc++.a"
-    _LDFLAGS="-static-libgcc -static-libstdc++"
-  fi
-
   if [[ "${WITHOUT_BORINGSSL}" != "yes" ]]; then
+    if [ "$(uname)" == "Darwin" ]; then
+      _LIBS="-lc++"
+    else
+      if [[ "${WITHOUT_CLANG}" != "yes" ]]; then
+        _LIBS="-l:libc++.a"
+        _LDFLAGS="-stdlib=libc++ -static-libgcc -static-libstdc++"
+      else
+        _LIBS="-l:libstdc++.a"
+        _LDFLAGS="-static-libgcc -static-libstdc++"
+      fi
+    fi
     _ECH="--enable-ech"
     _QUIC="--without-openssl-quic"
     _NGTCP2="--with-ngtcp2"
@@ -502,7 +523,8 @@ function build_curl() {
     --enable-http-auth \
     --enable-ipv6 \
     --enable-largefile \
-    --enable-manual \
+    --disable-ldap \
+    --disable-manual \
     --enable-mime \
     --enable-netrc \
     --enable-progress-meter \
@@ -532,9 +554,83 @@ function build_curl() {
     --with-zstd \
     --with-ssl=${ROOT_DIR} \
     --with-default-ssl-backend=openssl
-  make -j$(nproc)
+  make V=1 -j$(nproc)
 
-  cp -av "./src/curl" "${WORKING_PATH}"/curl && strip --strip-all "${WORKING_PATH}"/curl
+  cp -av "./src/curl" "${WORKING_PATH}"/curl && strip ${STRIP_FLAGS} "${WORKING_PATH}"/curl
+}
+
+function build_curl() {
+  change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/curl/curl"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  command=(
+    cmake "../${PKG}" -G"Ninja"
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON
+    -DBUILD_LIBCURL_DOCS=OFF -DBUILD_MISC_DOCS=OFF -DENABLE_CURL_MANUAL=OFF
+  )
+
+  command+=(
+    -DENABLE_IPV6=ON -DENABLE_ARES=OFF -DENABLE_THREADED_RESOLVER=ON
+    -DUSE_NGHTTP2=ON -DUSE_NGHTTP3=ON -DUSE_LIBSSH2=ON -DUSE_MSH3=OFF
+    -DCURL_DISABLE_GOPHER=ON
+    -DZLIB_INCLUDE_DIR="${ROOT_DIR}/include" -DZLIB_LIBRARY="${ROOT_DIR}/lib/libz.a"
+    -DCURL_BROTLI=ON -DCURL_ZSTD=ON
+    -DCURL_USE_SCHANNEL=OFF -DCURL_USE_SECTRANSP=OFF
+  )
+
+  if [[ "${WITHOUT_BORINGSSL}" != "yes" ]]; then
+    command+=(
+      -DCURL_USE_OPENSSL=ON -DHAVE_BORINGSSL=1 -DCURL_DEFAULT_SSL_BACKEND=openssl -DOPENSSL_ROOT_DIR="${ROOT_DIR}"
+      -DUSE_OPENSSL_QUIC=OFF -DUSE_ECH=ON -DUSE_HTTPSRR=ON -DUSE_NGTCP2=ON
+    )
+  else
+    command+=(
+      -DCURL_USE_OPENSSL=ON -DHAVE_BORINGSSL=0 -DCURL_DEFAULT_SSL_BACKEND=openssl -DOPENSSL_ROOT_DIR="${ROOT_DIR}"
+      -DUSE_OPENSSL_QUIC=ON -DUSE_ECH=OFF -DUSE_HTTPSRR=ON -DUSE_NGTCP2=OFF
+    )
+  fi
+
+  if [ "$(uname)" != "Darwin" ]; then
+    command+=(
+      -DCURL_DISABLE_LDAP=ON -DUSE_LIBIDN2=ON
+    )
+    # when using boringssl and clang -DOPENSSL_USE_STATIC_LIBS=ON would link to libstdc++.so
+    # if to do the static link, need to patch CMAKE_REQUIRED_LIBRARIES "stdc++"
+    #   sed -i -E 's#APPEND CURL_LIBS "stdc\+\+"#APPEND CURL_LIBS "-l:libc\+\+.a"#' "../${PKG}/CMakeLists.txt"
+    #
+    # Otherwise, set OPENSSL_USE_STATIC_LIBS=OFF and manually link to libc++
+
+    if [[ "${WITHOUT_BORINGSSL}" != "yes" ]]; then
+      if [[ "${WITHOUT_CLANG}" != "yes" ]]; then
+        command+=(
+          -DOPENSSL_USE_STATIC_LIBS=OFF
+          -DCMAKE_EXE_LINKER_FLAGS="-static-libgcc"
+          -DCMAKE_REQUIRED_LIBRARIES="c++"              # make boringssl can be detected by cmake
+          -DCMAKE_C_STANDARD_LIBRARIES="-l:libc++.a"    # make libc++ is the last library
+        )
+      else
+        #FIXME: not perfect, still need to fintune
+        command+=(
+          -DOPENSSL_USE_STATIC_LIBS=OFF
+          -DUSE_ECH=OFF -DHAVE_SSL_SET_QUIC_USE_LEGACY_CODEPOINT=ON
+          -DCMAKE_EXE_LINKER_FLAGS="-static-libgcc"     #  -static-libstdc++
+          -DCMAKE_C_STANDARD_LIBRARIES="-l:libstdc++.a"
+        )
+      fi
+    fi
+  else
+    command+=(
+      -DUSE_APPLE_IDN=ON -DUSE_LIBIDN2=OFF
+    )
+  fi
+
+  echo ${command} && PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "${command[@]}"
+
+  cmake --build . --parallel $(nproc) -v
+  cp -av "./src/curl" "${WORKING_PATH}"/curl && strip ${STRIP_FLAGS} "${WORKING_PATH}"/curl
 }
 
 function main() {
@@ -543,7 +639,14 @@ function main() {
 
   init_env;
 
-  (build_libunistring && build_libidn2) &
+  build_zlib &
+  build_brotli &
+  build_zstd &
+
+  if [[ "$(uname)" != "Darwin" ]]; then
+    (build_libunistring && build_libidn2) &
+  fi
+
   build_libpsl &
 
   if [[ "${WITHOUT_BORINGSSL}" != "yes" ]]; then
@@ -552,9 +655,6 @@ function main() {
     (build_openssl && build_nghttp3 && build_nghttp2 && build_libssh2) &
   fi
 
-  build_zlib &
-  build_brotli &
-  build_zstd &
   wait
 
   build_curl

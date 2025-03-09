@@ -3,7 +3,7 @@
 set -ex
 
 function init_env() {
-  export ROOT_DIR="${ROOTDIR:-/sysroot}"
+  export ROOT_DIR="${ROOT_DIR:-/sysroot}"
   export WORKING_PATH="${WORKING_PATH:-$(pwd)}"
   export TMP_DIR="${TMP_DIR:-/tmp}"
 
@@ -39,9 +39,17 @@ function init_env() {
   done
 }
 
+if [ "$(uname)" == "Linux" ]; then
+  STRIP_FLAGS="--strip-all"
+fi
+
 if [ "$(uname)" == "Darwin" ]; then
 function nproc() {
   sysctl -n hw.logicalcpu
+}
+
+function sed() {
+  gsed "$@"
 }
 fi
 
@@ -234,7 +242,7 @@ function url_from_git_server() {
 }
 
 function download_and_extract() {
-  local pkg dl_url git_srv git_header strip_level uncompressed_flag 
+  local pkg dl_url git_srv git_header strip_level uncompressed_flag
 
   pkg="${1}"
   dl_url="${2}"
@@ -308,7 +316,7 @@ function build_liblzma() {
   PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
     -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DBUILD_SHARED_LIBS=OFF \
-    -DXZ_DOC=OFF -DXZ_TOOL_XZ=OFF -DXZ_TOOL_SCRIPTS=OFF -DXZ_TOOL_XZDEC=OFF -DXZ_TOOL_LZMADEC=OFF -DXZ_TOOL_LZMAINFO=OFF 
+    -DXZ_DOC=OFF -DXZ_TOOL_XZ=OFF -DXZ_TOOL_SCRIPTS=OFF -DXZ_TOOL_XZDEC=OFF -DXZ_TOOL_LZMADEC=OFF -DXZ_TOOL_LZMAINFO=OFF
   cmake --build . --parallel $(nproc) --target install
 }
 
