@@ -15,13 +15,13 @@ function init_env() {
     export CXX="${CXX:-g++}"
   fi
 
-  if [ -n "${GITHUB_TOKEN_READ}" ]; then
+  if [[ -n "${GITHUB_TOKEN_READ}" ]]; then
     export AUTH_GITHUB="${GITHUB_TOKEN_READ}"
   else
     export AUTH_GITHUB=""
   fi
 
-  if [ -n "${EXTRA_CFLAGS}" ]; then
+  if [[ -n "${EXTRA_CFLAGS}" ]]; then
     export CFLAGS="${EXTRA_CFLAGS}"
     export CXXFLAGS="${EXTRA_CFLAGS}"
   fi
@@ -39,11 +39,11 @@ function init_env() {
   done
 }
 
-if [ "$(uname)" == "Linux" ]; then
+if [[ "$(uname)" == "Linux" ]]; then
   STRIP_FLAGS="--strip-all"
 fi
 
-if [ "$(uname)" == "Darwin" ]; then
+if [[ "$(uname)" == "Darwin" ]]; then
 function nproc() {
   sysctl -n hw.logicalcpu
 }
@@ -88,7 +88,7 @@ function _get_tag() {
     | sed -En 's#'"${ver_exp}"'#\1__\3.\4.\6.\8#p'
   )
 
-  if [ -z "${tag_verion_map}" ]; then
+  if [[ -z "${tag_verion_map}" ]]; then
     echo ","
     return
   fi
@@ -101,7 +101,7 @@ function _get_tag() {
   | sed -E '/^3gpp-/d' \
   | sed -E '/__[0-9]+\.[0-9]+\.[0-9]+\.[^0-9]+/d')
 
-  if [ -z "${version}" ]; then
+  if [[ -z "${version}" ]]; then
     version=$(echo "${tag_verion_map%x}" \
       | sed 's#.*__##' \
       | sort -t. -k 1,1n -k 2,2n -k 3,3n -k 4,4n\
@@ -169,10 +169,10 @@ function url_from_git_server() {
   fi
 
   ## search release page
-  if [ -n "${srv_rel_url}" ]; then
+  if [[ -n "${srv_rel_url}" ]]; then
     disable_trace
     srv_content=$(curl "${git_header[@]}" -fsSL "${srv_rel_url}")
-    if [ "${git_type}" = "gitlab" ]; then
+    if [[ "${git_type}" = "gitlab" ]]; then
       srv_content=$(echo "${srv_content}" | sed -E 's#,#,\n#g')
     fi
 
@@ -185,7 +185,7 @@ function url_from_git_server() {
     ret_ver=$(echo "$result" | cut -d ',' -f 2)
 
     disable_trace
-    if [ -n "${ret_tag}" ]; then
+    if [[ -n "${ret_tag}" ]]; then
       browser_download_urls=$(echo "${srv_content%x}" \
         | sed -En '/"'"${rel_dl_key}"'":/ s#.*"'"${rel_dl_key}"'":[[:blank:]]*"([^"]+(\.gz|\.tgz|\.bz2|\.xz|\.zstd|\.zst))".*#\1#p' \
         | sed -En '/\/'"${ret_tag}"'\//p' \
@@ -195,12 +195,12 @@ function url_from_git_server() {
   fi
 
   ## search release page failed, search tag page
-  if [ -n "${srv_tag_url}" ] && [ -z "${browser_download_urls}" ]; then
+  if [[ -n "${srv_tag_url}" && -z "${browser_download_urls}" ]]; then
     disable_trace
     srv_content=$(curl "${git_header[@]}" -fsSL "${srv_tag_url}")
-    if [ "${git_type}" = "bitbucket" ] || [ "${git_type}" = "gitlab" ]; then
+    if [[ "${git_type}" = "bitbucket" || "${git_type}" = "gitlab" ]]; then
       srv_content=$(echo "${srv_content}" | sed -E 's#,#,\n#g')
-    elif [ "${git_type}" = "googlesource" ]; then
+    elif [[ "${git_type}" = "googlesource" ]]; then
       # "v3.1.0": {   ->  "tag_name": "v3.1.0",
       srv_content=$(echo "${srv_content}" | sed -En '/[[:blank:]]*"[^"]+": \{/ s#.*("[^"]+").*#"'"${tag_tag_key}"'": \1,#p')
     fi
@@ -214,13 +214,13 @@ function url_from_git_server() {
     ret_ver=$(echo "$result" | cut -d ',' -f 2)
 
     disable_trace
-    if [ -n "${ret_tag}" ]; then
+    if [[ -n "${ret_tag}" ]]; then
       browser_download_urls="${tag_dl_url}/${ret_tag}.tar.gz"
     fi
     enable_trace
   fi
 
-  if [ -z "${browser_download_urls}" ]; then
+  if [[ -z "${browser_download_urls}" ]]; then
     # in case of no browser_download_url in release, try to use the tag name
     # like google/brotli, only contain binary but not source code
     ret_ver="$([ -n "${version}" ] && echo "${version}" || echo "master")"
@@ -358,6 +358,8 @@ function build_graphite() {
   download_and_extract "${PKG}" "${URL}"
   change_clean_dir "${PKG}_build"
 
+  sed -i -E '/if  \(\$\{CMAKE_SYSTEM_NAME\} STREQUAL "Darwin"\)/,/nolib_test/ s#(.*)(nolib_test.*)#\1if (BUILD_SHARED_LIBS)\n\1\1\2\n\1endif()#' "../${PKG}/src/CMakeLists.txt"
+
   PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
     -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DBUILD_SHARED_LIBS=OFF
@@ -375,6 +377,19 @@ function build_freetype() {
   PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" meson setup "../${PKG}" \
     --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --buildtype release --default-library=static \
     -Dtests=disabled -Dharfbuzz=${harfbuzz}
+  ninja -j$(nproc) install
+}
+
+# fribidi
+function build_fribidi() {
+  change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/fribidi/fribidi"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" meson setup "../${PKG}" \
+    --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --buildtype release --default-library=static \
+    -Dtests=false -Ddocs=false -Dbin=false
   ninja -j$(nproc) install
 }
 
@@ -404,6 +419,32 @@ function build_libunibreak() {
   make -j$(nproc) install
 }
 
+# libxml2
+function build_libxml2() {
+  change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/GNOME/libxml2"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" meson setup "../${PKG}" \
+    --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --buildtype release --default-library=static \
+    -Dlzma=enabled -Dzlib=enabled
+  ninja -j$(nproc) install
+}
+
+# fontconfig
+function build_fontconfig() {
+  change_dir "${TMP_DIR}"
+  url_from_git_server "https://gitlab.freedesktop.org/fontconfig/fontconfig"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" meson setup "../${PKG}" \
+    --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --buildtype release --default-library=static \
+    -Dtests=disabled -Ddoc=disabled -Dtools=disabled -Dxml-backend=libxml2
+  ninja -j$(nproc) install
+}
+
 # libass
 function build_libass() {
   change_dir "${TMP_DIR}"
@@ -413,8 +454,75 @@ function build_libass() {
 
   PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" meson setup "../${PKG}" \
     --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --buildtype release --default-library=static \
-    -Dtest=false -Dfontconfig=enabled -Dlibunibreak=enabled
+    -Dtest=false -Dfontconfig=enabled -Dlibunibreak=enabled -Dcoretext=disabled
   ninja -j$(nproc) install
+}
+
+# opus
+function build_opus() {
+  change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/xiph/opus"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
+    -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -DBUILD_SHARED_LIBS=OFF
+  cmake --build . --parallel $(nproc) --target install
+}
+
+# libfdk-aac
+function build_libfdk-aac() {
+  change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/mstorsjo/fdk-aac"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
+    -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -DBUILD_SHARED_LIBS=OFF
+  cmake --build . --parallel $(nproc) --target install
+}
+
+# libogg
+function build_libogg() {
+  change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/xiph/ogg"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
+    -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DBUILD_TESTING=OFF
+  cmake --build . --parallel $(nproc) --target install
+}
+
+# libvorbis
+function build_libvorbis() {
+  change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/xiph/vorbis"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
+    -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DBUILD_TESTING=OFF
+  cmake --build . --parallel $(nproc) --target install
+}
+
+# libmp3lame
+function build_libmp3lame() {
+  change_dir "${TMP_DIR}"
+  PKG="libmp3lame"
+  download_and_extract "${PKG}" "https://sourceforge.net/projects/lame/files/lame/3.100/lame-3.100.tar.gz"
+  change_clean_dir "${PKG}_build"
+
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "../${PKG}/configure" \
+    --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --disable-shared --enable-static \
+    --enable-nasm --disable-gtktest
+  make -j$(nproc) install
 }
 
 # dav1d
@@ -487,6 +595,19 @@ function build_libvpx() {
   make -j$(nproc) install
 }
 
+# libx264
+function build_libx264() {
+  change_dir "${TMP_DIR}"
+  url_from_git_server "https://code.videolan.org/videolan/x264" "stable"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "../${PKG}/configure" \
+    --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --disable-shared --enable-static \
+    --disable-cli
+  make -j$(nproc) install
+}
+
 # libx265
 function build_libx265() {
   change_dir "${TMP_DIR}"
@@ -520,7 +641,11 @@ function build_libx265() {
   cmake --build . --parallel $(nproc)
 
   mv libx265.a libx265_main.a
-  ar -M <<EOF
+
+ if [[ "$(uname)" == "Darwin" ]]; then
+    libtool -static -o libx265.a libx265_main.a libx265_main10.a libx265_main12.a
+  else
+    ar -M <<EOF
 CREATE libx265.a
 ADDLIB libx265_main.a
 ADDLIB libx265_main10.a
@@ -528,6 +653,8 @@ ADDLIB libx265_main12.a
 SAVE
 END
 EOF
+  fi
+
   cmake --install .
 
   ## Remove -lstdc++ -lgcc -lgcc_s from x265.pc to honor --static-libstdc++ and --static-libgcc
@@ -575,7 +702,7 @@ function build_openssl() {
   make install_sw
 }
 
-function build_ffmpeg() {
+function build_ffmpeg_autoconf() {
   change_dir "${TMP_DIR}"
   url_from_git_server "https://github.com/FFmpeg/FFmpeg" "master"
   download_and_extract "${PKG}" "${URL}"
@@ -587,11 +714,19 @@ function build_ffmpeg() {
   #patch -p1 < <(curl -fsSL https://gitlab.com/AOMediaCodec/SVT-AV1/-/raw/master/.gitlab/workflows/linux/ffmpeg_n7_fix.patch)
   popd > /dev/null
 
-  [[ "${WITHOUT_CLANG}" != "yes" ]] && _CUDA_LLVM="--enable-cuda-llvm" || _CUDA_LLVM="--disable-cuda-llvm"
-
   change_clean_dir "${PKG}_build"
 #   --ld="c++" --extra-ldflags="-static-libgcc -static-libstdc++ -L${ROOT_DIR}/lib" \
 #  --cc="clang" --cxx="clang++" --ar="llvm-ar" --ranlib="llvm-ranlib" --ld="clang++"
+
+  if [[ "$(uname)" == "Darwin" ]]; then
+    _NV_CODEC=(--disable-cuda-llvm --disable-ffnvcodec)
+  else
+    if [[ "${WITHOUT_CLANG}" != "yes" ]]; then
+      _NV_CODEC=(--enable-cuda-llvm --enable-ffnvcodec)
+    else
+      _NV_CODEC=(--disable-cuda-llvm --enable-ffnvcodec)
+    fi
+  fi
 
   PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "../${PKG}/configure" \
     --pkg-config-flags="--static" --disable-shared --enable-static \
@@ -604,22 +739,85 @@ function build_ffmpeg() {
     --enable-libass \
     --enable-libaom \
     --enable-libdav1d \
-    --enable-libfdk-aac \
-    --enable-libmp3lame \
-    --enable-libopus \
+    --enable-libopus --enable-libvorbis --enable-libfdk-aac --enable-libmp3lame \
     --enable-cross-compile \
     --enable-libsvtav1 \
-    "${_CUDA_LLVM}" --enable-ffnvcodec \
+    "${_NV_CODEC[@]}" \
     --enable-libvmaf \
-    --enable-libvorbis \
     --enable-libvpx \
     --enable-libx264 \
     --enable-libx265 \
     --enable-openssl
   make -j$(nproc)
 
-  cp -av "./ffmpeg" "${WORKING_PATH}"/ffmpeg && strip --strip-all "${WORKING_PATH}"/ffmpeg
-  cp -av "./ffprobe" "${WORKING_PATH}"/ffprobe && strip --strip-all "${WORKING_PATH}"/ffprobe
+  cp -av "./ffmpeg" "${WORKING_PATH}"/ffmpeg && strip ${STRIP_FLAGS} "${WORKING_PATH}"/ffmpeg
+  cp -av "./ffprobe" "${WORKING_PATH}"/ffprobe && strip ${STRIP_FLAGS} "${WORKING_PATH}"/ffprobe
+}
+
+function build_ffmpeg() {
+  change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/FFmpeg/FFmpeg" "master"
+  download_and_extract "${PKG}" "${URL}"
+
+  pushd "${PKG}" > /dev/null
+  sed -Ei \
+    -e '/^[[:space:]]*int hide_banner = 0;$/ s#= 0#= 1#' \
+    -e '/^[[:space:]]*hide_banner = 1;$/ s#= 1#= 0#' "./fftools/cmdutils.c"
+  #patch -p1 < <(curl -fsSL https://gitlab.com/AOMediaCodec/SVT-AV1/-/raw/master/.gitlab/workflows/linux/ffmpeg_n7_fix.patch)
+  popd > /dev/null
+
+  change_clean_dir "${PKG}_build"
+
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" && command=(
+    "../${PKG}/configure"
+    --pkg-config-flags="--static" --disable-shared --enable-static
+    --enable-gpl --enable-nonfree --enable-version3
+    --extra-version=$(date +%Y%m%d)
+    --disable-doc --enable-pic
+    --enable-cross-compile
+    --cc="${CC}" --ld="${CXX}"
+    --enable-zlib --enable-bzlib --enable-lzma
+    --enable-libdav1d --enable-libaom --enable-libsvtav1
+    --enable-libvpx --enable-libx264 --enable-libx265
+    --enable-libopus --enable-libvorbis --enable-libfdk-aac --enable-libmp3lame
+    --enable-libass
+    --enable-libvmaf
+    --enable-openssl
+  )
+
+  if [[ "$(uname)" != "Darwin" ]]; then
+    if [[ "${WITHOUT_CLANG}" != "yes" ]]; then
+      command+=(
+        --enable-cuda-llvm
+        --enable-ffnvcodec
+        --extra-cflags="-I${ROOT_DIR}/include ${CFLAGS}"
+        --extra-ldflags="-static-libstdc++ -L${ROOT_DIR}/lib"
+      )
+    else
+      command+=(
+        --disable-cuda-llvm
+        --enable-ffnvcodec
+        --extra-cflags="-I${ROOT_DIR}/include ${CFLAGS}"
+        --extra-ldflags="-static-libgcc -static-libstdc++ -L${ROOT_DIR}/lib"
+      )
+    fi
+  else
+    command+=(
+      --disable-cuda-llvm
+      --disable-ffnvcodec
+      --extra-cflags="-I${ROOT_DIR}/include ${CFLAGS}"
+      --extra-ldflags="-L${ROOT_DIR}/lib"
+      --disable-securetransport
+      --disable-appkit --disable-avfoundation --disable-coreimage --enable-videotoolbox --disable-audiotoolbox
+    )
+  fi
+
+  echo ${command} && PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "${command[@]}"
+
+  make -j$(nproc)
+
+  cp -av "./ffmpeg" "${WORKING_PATH}"/ffmpeg && strip ${STRIP_FLAGS} "${WORKING_PATH}"/ffmpeg
+  cp -av "./ffprobe" "${WORKING_PATH}"/ffprobe && strip ${STRIP_FLAGS} "${WORKING_PATH}"/ffprobe
 }
 
 function main() {
@@ -634,18 +832,25 @@ function main() {
   build_brotli &
   wait
 
-  (build_graphite && build_freetype && build_harfbuzz && build_freetype "enabled") &
+  (build_graphite && build_freetype && build_fribidi && build_harfbuzz && build_freetype "enabled") &
   build_libunibreak &
+  (build_libxml2 && build_fontconfig) &
   wait
   build_libass
+
+  build_opus &
+  (build_libogg && build_libvorbis) &
+  build_libfdk-aac &
+  build_libmp3lame &
 
   build_dav1d &
   build_aom &
   build_svtav1 &
   build_vmaf &
   build_libvpx &
+  build_libx264 &
   build_libx265 &
-  build_nv-codec-headers &
+  ([[ "$(uname)" != "Darwin" ]] && build_nv-codec-headers) &
 
   if [[ "${WITHOUT_BORINGSSL}" != "yes" ]]; then
     build_boringssl &
@@ -659,6 +864,6 @@ function main() {
 
 # If the first argument is not "--source-only" then run the script,
 # otherwise just provide the functions
-if [ "$1" != "--source-only" ]; then
+if [[ "$1" != "--source-only" ]]; then
   main "$@";
 fi

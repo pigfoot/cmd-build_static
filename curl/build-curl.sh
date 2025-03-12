@@ -15,23 +15,23 @@ function init_env() {
     export CXX="${CXX:-g++}"
   fi
 
-  if [ -n "${GITHUB_TOKEN_READ}" ]; then
+  if [[ -n "${GITHUB_TOKEN_READ}" ]]; then
     export AUTH_GITHUB="${GITHUB_TOKEN_READ}"
   else
     export AUTH_GITHUB=""
   fi
 
-  if [ -n "${EXTRA_CFLAGS}" ]; then
+  if [[ -n "${EXTRA_CFLAGS}" ]]; then
     export CFLAGS="${EXTRA_CFLAGS}"
     export CXXFLAGS="${EXTRA_CFLAGS}"
   fi
 }
 
-if [ "$(uname)" == "Linux" ]; then
+if [[ "$(uname)" == "Linux" ]]; then
   STRIP_FLAGS="--strip-all"
 fi
 
-if [ "$(uname)" == "Darwin" ]; then
+if [[ "$(uname)" == "Darwin" ]]; then
 function nproc() {
   sysctl -n hw.logicalcpu
 }
@@ -76,7 +76,7 @@ function _get_tag() {
     | sed -En 's#'"${ver_exp}"'#\1__\3.\4.\6.\8#p'
   )
 
-  if [ -z "${tag_verion_map}" ]; then
+  if [[ -z "${tag_verion_map}" ]]; then
     echo ","
     return
   fi
@@ -89,7 +89,7 @@ function _get_tag() {
   | sed -E '/^3gpp-/d' \
   | sed -E '/__[0-9]+\.[0-9]+\.[0-9]+\.[^0-9]+/d')
 
-  if [ -z "${version}" ]; then
+  if [[ -z "${version}" ]]; then
     version=$(echo "${tag_verion_map%x}" \
       | sed 's#.*__##' \
       | sort -t. -k 1,1n -k 2,2n -k 3,3n -k 4,4n\
@@ -157,10 +157,10 @@ function url_from_git_server() {
   fi
 
   ## search release page
-  if [ -n "${srv_rel_url}" ]; then
+  if [[ -n "${srv_rel_url}" ]]; then
     disable_trace
     srv_content=$(curl "${git_header[@]}" -fsSL "${srv_rel_url}")
-    if [ "${git_type}" = "gitlab" ]; then
+    if [[ "${git_type}" = "gitlab" ]]; then
       srv_content=$(echo "${srv_content}" | sed -E 's#,#,\n#g')
     fi
 
@@ -173,7 +173,7 @@ function url_from_git_server() {
     ret_ver=$(echo "$result" | cut -d ',' -f 2)
 
     disable_trace
-    if [ -n "${ret_tag}" ]; then
+    if [[ -n "${ret_tag}" ]]; then
       browser_download_urls=$(echo "${srv_content%x}" \
         | sed -En '/"'"${rel_dl_key}"'":/ s#.*"'"${rel_dl_key}"'":[[:blank:]]*"([^"]+(\.gz|\.tgz|\.bz2|\.xz|\.zstd|\.zst))".*#\1#p' \
         | sed -En '/\/'"${ret_tag}"'\//p' \
@@ -183,12 +183,12 @@ function url_from_git_server() {
   fi
 
   ## search release page failed, search tag page
-  if [ -n "${srv_tag_url}" ] && [ -z "${browser_download_urls}" ]; then
+  if [[ -n "${srv_tag_url}" && -z "${browser_download_urls}" ]]; then
     disable_trace
     srv_content=$(curl "${git_header[@]}" -fsSL "${srv_tag_url}")
-    if [ "${git_type}" = "bitbucket" ] || [ "${git_type}" = "gitlab" ]; then
+    if [[ "${git_type}" = "bitbucket" || "${git_type}" = "gitlab" ]]; then
       srv_content=$(echo "${srv_content}" | sed -E 's#,#,\n#g')
-    elif [ "${git_type}" = "googlesource" ]; then
+    elif [[ "${git_type}" = "googlesource" ]]; then
       # "v3.1.0": {   ->  "tag_name": "v3.1.0",
       srv_content=$(echo "${srv_content}" | sed -En '/[[:blank:]]*"[^"]+": \{/ s#.*("[^"]+").*#"'"${tag_tag_key}"'": \1,#p')
     fi
@@ -202,13 +202,13 @@ function url_from_git_server() {
     ret_ver=$(echo "$result" | cut -d ',' -f 2)
 
     disable_trace
-    if [ -n "${ret_tag}" ]; then
+    if [[ -n "${ret_tag}" ]]; then
       browser_download_urls="${tag_dl_url}/${ret_tag}.tar.gz"
     fi
     enable_trace
   fi
 
-  if [ -z "${browser_download_urls}" ]; then
+  if [[ -z "${browser_download_urls}" ]]; then
     # in case of no browser_download_url in release, try to use the tag name
     # like google/brotli, only contain binary but not source code
     ret_ver="$([ -n "${version}" ] && echo "${version}" || echo "master")"
@@ -464,7 +464,7 @@ function build_curl_autoconf() {
   change_clean_dir "${PKG}_build"
 
   if [[ "${WITHOUT_BORINGSSL}" != "yes" ]]; then
-    if [ "$(uname)" == "Darwin" ]; then
+    if [[ "$(uname)" == "Darwin" ]]; then
       _LIBS="-lc++"
     else
       if [[ "${WITHOUT_CLANG}" != "yes" ]]; then
@@ -593,7 +593,7 @@ function build_curl() {
     )
   fi
 
-  if [ "$(uname)" != "Darwin" ]; then
+  if [[ "$(uname)" != "Darwin" ]]; then
     command+=(
       -DCURL_DISABLE_LDAP=ON -DUSE_LIBIDN2=ON
     )
@@ -662,6 +662,6 @@ function main() {
 
 # If the first argument is not "--source-only" then run the script,
 # otherwise just provide the functions
-if [ "$1" != "--source-only" ]; then
+if [[ "$1" != "--source-only" ]]; then
   main "$@";
 fi
