@@ -426,10 +426,13 @@ function build_libxml2() {
   download_and_extract "${PKG}" "${URL}"
   change_clean_dir "${PKG}_build"
 
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" meson setup "../${PKG}" \
-    --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --buildtype release --default-library=static \
-    -Dlzma=enabled -Dzlib=enabled
-  ninja -j$(nproc) install
+  # meson need python-dev?
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
+    -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DLIBXML2_WITH_DEBUG=OFF -DLIBXML2_WITH_PYTHON=OFF -DLIBXML2_WITH_PROGRAMS=OFF \
+    -DLIBXML2_WITH_TESTS=OFF
+  cmake --build . --parallel $(nproc) --target install
 }
 
 # fontconfig
@@ -439,6 +442,9 @@ function build_fontconfig() {
   download_and_extract "${PKG}" "${URL}"
   change_clean_dir "${PKG}_build"
 
+  sed -i -E '/meson_version : '"'"'>= 1.6.0'"'"'/ s#1\.6\.0#1\.0\.0#' "../${PKG}/meson.build"
+
+  # if using meson,  need (a) need latest version >= 1.6 (b) need git
   PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" meson setup "../${PKG}" \
     --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --buildtype release --default-library=static \
     -Dtests=disabled -Ddoc=disabled -Dtools=disabled -Dxml-backend=libxml2
@@ -515,8 +521,8 @@ function build_libvorbis() {
 # libmp3lame
 function build_libmp3lame() {
   change_dir "${TMP_DIR}"
-  PKG="libmp3lame"
-  download_and_extract "${PKG}" "https://sourceforge.net/projects/lame/files/lame/3.100/lame-3.100.tar.gz"
+  url_from_git_server "https://github.com/pigfoot/libmp3lame"
+  download_and_extract "${PKG}" "${URL}"
   change_clean_dir "${PKG}_build"
 
   PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "../${PKG}/configure" \
@@ -605,6 +611,18 @@ function build_libx264() {
   PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "../${PKG}/configure" \
     --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --disable-shared --enable-static \
     --disable-cli
+  make -j$(nproc) install
+}
+
+# libnuma
+function build_libnuma() {
+  change_dir "${TMP_DIR}"
+  url_from_git_server "https://github.com/numactl/numactl"
+  download_and_extract "${PKG}" "${URL}"
+  change_clean_dir "${PKG}_build"
+
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" "../${PKG}/configure" \
+    --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --disable-shared --enable-static
   make -j$(nproc) install
 }
 
@@ -786,27 +804,26 @@ function build_ffmpeg() {
   )
 
   if [[ "$(uname)" != "Darwin" ]]; then
+    command+=(
+      --extra-cflags="-I${ROOT_DIR}/include ${CFLAGS}"
+      --extra-ldflags="-static-libgcc -static-libstdc++ -L${ROOT_DIR}/lib"
+      --enable-ffnvcodec
+    )
     if [[ "${WITHOUT_CLANG}" != "yes" ]]; then
       command+=(
         --enable-cuda-llvm
-        --enable-ffnvcodec
-        --extra-cflags="-I${ROOT_DIR}/include ${CFLAGS}"
-        --extra-ldflags="-static-libstdc++ -L${ROOT_DIR}/lib"
       )
     else
       command+=(
         --disable-cuda-llvm
-        --enable-ffnvcodec
-        --extra-cflags="-I${ROOT_DIR}/include ${CFLAGS}"
-        --extra-ldflags="-static-libgcc -static-libstdc++ -L${ROOT_DIR}/lib"
       )
     fi
   else
     command+=(
-      --disable-cuda-llvm
-      --disable-ffnvcodec
       --extra-cflags="-I${ROOT_DIR}/include ${CFLAGS}"
       --extra-ldflags="-L${ROOT_DIR}/lib"
+      --disable-cuda-llvm
+      --disable-ffnvcodec
       --disable-securetransport
       --disable-appkit --disable-avfoundation --disable-coreimage --enable-videotoolbox --disable-audiotoolbox
     )
@@ -849,7 +866,7 @@ function main() {
   build_vmaf &
   build_libvpx &
   build_libx264 &
-  build_libx265 &
+  (([[ "$(uname)" == "Linux" ]] && build_libnuma) && build_libx265) &
   ([[ "$(uname)" != "Darwin" ]] && build_nv-codec-headers) &
 
   if [[ "${WITHOUT_BORINGSSL}" != "yes" ]]; then

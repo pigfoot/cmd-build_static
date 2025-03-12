@@ -8,9 +8,7 @@ buildah run "${builder}" sh -c 'sed -Ei "/[ -z \"$PS1\" ] && return/aexport TERM
 buildah run "${builder}" sh -c 'apt update -qq && apt upgrade -qq -y && apt install -qq -y apt-utils whiptail'
 buildah run "${builder}" sh -c 'DEBIAN_FRONTEND=noninteractive apt install -qq -y \
   autoconf libtool binutils pkg-config cmake meson \
-  curl nasm yasm xxd \
-  libfribidi-dev libfontconfig-dev libnuma-dev \
-  libvorbis-dev libmp3lame-dev libfdk-aac-dev libopus-dev libx264-dev libswscale-dev \
+  curl nasm yasm xxd git
   > /dev/null'
 [[ "${WITHOUT_CLANG}" != "yes" ]] && buildah run "${builder}" sh -c 'CLANG_VER=$(apt-cache search clang | sed -En "/^clang-[0-9]+/ s#^clang-([0-9]+)[[:space:]].*#\1#p" | sort | sed "\$!d") \
   && apt install -qq -y clang-"${CLANG_VER}" libc++-"${CLANG_VER}"-dev \
