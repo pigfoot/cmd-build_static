@@ -27,7 +27,7 @@ function init_env() {
   fi
 
   libs=(
-    libfdk-aac.a libfontconfig.a libfribidi.a libnuma.a
+    libfdk-aac.a libfribidi.a libnuma.a
     libvorbisenc.a libmp3lame.a libogg.a libopus.a libvorbis.a libx264.a
     libexpat.a
   )
@@ -438,11 +438,11 @@ function build_libxml2() {
 # fontconfig
 function build_fontconfig() {
   change_dir "${TMP_DIR}"
-  url_from_git_server "https://gitlab.freedesktop.org/fontconfig/fontconfig"
+  url_from_git_server "https://gitlab.freedesktop.org/fontconfig/fontconfig" "2.16.0"
   download_and_extract "${PKG}" "${URL}"
   change_clean_dir "${PKG}_build"
 
-  sed -i -E '/meson_version : '"'"'>= 1.6.0'"'"'/ s#1\.6\.0#1\.0\.0#' "../${PKG}/meson.build"
+  #sed -i -E '/meson_version : '"'"'>= 1.6.0'"'"'/ s#1\.6\.0#1\.3\.0#' "../${PKG}/meson.build"
 
   # if using meson,  need (a) need latest version >= 1.6 (b) need git
   PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" meson setup "../${PKG}" \
@@ -866,7 +866,7 @@ function main() {
   build_vmaf &
   build_libvpx &
   build_libx264 &
-  (([[ "$(uname)" == "Linux" ]] && build_libnuma) && build_libx265) &
+  (([[ "$(uname)" == "Linux" ]] && build_libnuma || true) && build_libx265) &
   ([[ "$(uname)" != "Darwin" ]] && build_nv-codec-headers) &
 
   if [[ "${WITHOUT_BORINGSSL}" != "yes" ]]; then

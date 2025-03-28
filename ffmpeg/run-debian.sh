@@ -4,13 +4,15 @@ set -ex
 
 builder=$(buildah from "docker.io/library/debian:${CNTR_VER:-stable-slim}")
 buildah config --workingdir '/io' --env TERM="xterm-256color" "${builder}"
-buildah run "${builder}" sh -c 'echo "export TERM=xterm-256color" >> ~/.bashrc'
+buildah run "${builder}" sh -c 'echo "\nexport TERM=xterm-256color\nexport PATH=\"\$HOME/.local/bin:\$PATH\"" >> ~/.profile'
 buildah run "${builder}" sh -c 'echo "deb http://deb.debian.org/debian $(sed -En "/^VERSION_CODENAME/ s#.*=##p" /etc/os-release) contrib non-free non-free-firmware" > /etc/apt/sources.list'
 buildah run "${builder}" sh -c 'apt update -qq && apt upgrade -qq -y && apt install -qq -y apt-utils whiptail'
 buildah run "${builder}" sh -c 'DEBIAN_FRONTEND=noninteractive apt install -qq -y \
-  autoconf libtool binutils pkg-config cmake meson \
+  build-essential autoconf libtool binutils pkg-config cmake ninja-build python3-minimal \
   curl nasm yasm xxd git
   > /dev/null'
+buildah run "${builder}" sh -lc 'curl -fsSL https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh \
+  && uv tool install meson'
 [[ "${WITHOUT_CLANG}" != "yes" ]] && buildah run "${builder}" sh -c 'CLANG_VER=$(apt-cache search clang | sed -En "/^clang-[0-9]+/ s#^clang-([0-9]+)[[:space:]].*#\1#p" | sort | sed "\$!d") \
   && apt install -qq -y clang-"${CLANG_VER}" libc++-"${CLANG_VER}"-dev \
   && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-"${CLANG_VER}" 20 \
@@ -24,7 +26,7 @@ buildah run "${builder}" sh -c 'DEBIAN_FRONTEND=noninteractive apt install -qq -
     --slave /usr/bin/llvm-ranlib llvm-ranlib /usr/bin/llvm-ranlib-"${CLANG_VER}" \
   > /dev/null'
 buildah run "${builder}" sh -c 'apt clean'
-buildah run -v "$(pwd):/io" "${builder}" sh -c ' \
+buildah run -v "$(pwd):/io" "${builder}" sh -lc ' \
   GITHUB_TOKEN_READ="'"${GITHUB_TOKEN_READ}"'" \
   WITHOUT_BORINGSSL="'"${WITHOUT_BORINGSSL}"'" \
   WITHOUT_CLANG="'"${WITHOUT_CLANG}"'" \
