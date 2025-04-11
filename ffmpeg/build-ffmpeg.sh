@@ -44,6 +44,7 @@ if [[ "$(uname)" == "Linux" ]]; then
 fi
 
 if [[ "$(uname)" == "Darwin" ]]; then
+export MACOSX_DEPLOYMENT_TARGET="$(xcrun --sdk macosx --show-sdk-version | cut -d '.' -f 1).0"
 function nproc() {
   sysctl -n hw.logicalcpu
 }
