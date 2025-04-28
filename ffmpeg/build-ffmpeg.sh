@@ -339,7 +339,7 @@ function build_libbz2() {
 # libpng
 function build_libpng() {
   change_dir "${TMP_DIR}"
-  url_from_git_server "https://github.com/pnggroup/libpng" "v1.6.46"
+  url_from_git_server "https://github.com/pnggroup/libpng" "v1.6.47"
   download_and_extract "${PKG}" "${URL}"
   change_clean_dir "${PKG}_build"
 
@@ -361,7 +361,7 @@ function build_graphite() {
 
   sed -i -E '/if  \(\$\{CMAKE_SYSTEM_NAME\} STREQUAL "Darwin"\)/,/nolib_test/ s#(.*)(nolib_test.*)#\1if (BUILD_SHARED_LIBS)\n\1\1\2\n\1endif()#' "../${PKG}/src/CMakeLists.txt"
 
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DBUILD_SHARED_LIBS=OFF
   cmake --build . --parallel $(nproc) --target install
@@ -439,7 +439,7 @@ function build_libxml2() {
 # fontconfig
 function build_fontconfig() {
   change_dir "${TMP_DIR}"
-  url_from_git_server "https://gitlab.freedesktop.org/fontconfig/fontconfig" "2.16.0"
+  url_from_git_server "https://gitlab.freedesktop.org/fontconfig/fontconfig"
   download_and_extract "${PKG}" "${URL}"
   change_clean_dir "${PKG}_build"
 
@@ -498,10 +498,10 @@ function build_libogg() {
   download_and_extract "${PKG}" "${URL}"
   change_clean_dir "${PKG}_build"
 
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DBUILD_SHARED_LIBS=OFF \
-    -DBUILD_TESTING=OFF
+    -DBUILD_TESTING=OFF -DINSTALL_DOCS=OFF
   cmake --build . --parallel $(nproc) --target install
 }
 
@@ -512,7 +512,7 @@ function build_libvorbis() {
   download_and_extract "${PKG}" "${URL}"
   change_clean_dir "${PKG}_build"
 
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" \
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DBUILD_SHARED_LIBS=OFF \
     -DBUILD_TESTING=OFF
@@ -633,30 +633,41 @@ function build_libx265() {
   url_from_git_server "https://bitbucket.org/multicoreware/x265_git"
   download_and_extract "${PKG}" "${URL}"
 
+  # remove build if x265 version <= 4.1 and cmake >=4
+  sed -i -E \
+    -e '/if\(POLICY (CMP0025|CMP0054)\)/,/endif\(\)/d' \
+    -e '/cmake_minimum_required \(VERSION 2\.8\.8\)/ s#2\.8\.8\)#2\.8\.8\.\.\.3\.10\)#' \
+    -e '/if\(\$\{CMAKE_CXX_COMPILER_ID\} STREQUAL "Clang"\)/ s#\)$# OR \$\{CMAKE_CXX_COMPILER_ID\} STREQUAL "AppleClang"\)#' \
+    -e '/# compile ARM arch asm files here/,/foreach\(ASM \$\{ARM_ASMS\}\)/ s#(.*enable_language\(ASM\))(.*)#\1\nif\(APPLE\)\nset\(ARM_ARGS \$\{ARM_ARGS\} -arch \$\{CMAKE_OSX_ARCHITECTURES\}\)\nendif\(\)\2#' \
+    "${PKG}/source/CMakeLists.txt"
+
   #https://github.com/rdp/ffmpeg-windows-build-helpers/issues/185
 
   ## first stage for 12-bit
   change_clean_dir "${PKG}_build_12bits"
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}/source" \
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}/source" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-    -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DSTATIC_LINK_CRT=ON -DEXPORT_C_API=OFF -DHIGH_BIT_DEPTH=ON -DMAIN12=ON
+    -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DSTATIC_LINK_CRT=ON -DEXPORT_C_API=OFF -DHIGH_BIT_DEPTH=ON -DMAIN12=ON \
+    -DENABLE_LIBNUMA=$([[ "$(uname)" == "Linux" ]] && echo "ON" || echo "OFF") -DNO_ATOMICS=ON
   cmake --build . --parallel $(nproc) && cd ..
 
   ## second stage for 10-bit
   change_clean_dir "${PKG}_build_10bits"
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}/source" \
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}/source" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-    -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DSTATIC_LINK_CRT=ON -DEXPORT_C_API=OFF -DHIGH_BIT_DEPTH=ON -DMAIN12=OFF
+    -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DSTATIC_LINK_CRT=ON -DEXPORT_C_API=OFF -DHIGH_BIT_DEPTH=ON -DMAIN12=OFF \
+    -DENABLE_LIBNUMA=$([[ "$(uname)" == "Linux" ]] && echo "ON" || echo "OFF") -DNO_ATOMICS=ON
   cmake --build . --parallel $(nproc) && cd ..
 
   # final stage to merge 12-bit and 10-bit
   change_clean_dir "${PKG}_build"
   ln -sf "../${PKG}_build_12bits/libx265.a" libx265_main12.a
   ln -sf "../${PKG}_build_10bits/libx265.a" libx265_main10.a
-  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}/source" \
+  PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}/source" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DSTATIC_LINK_CRT=ON \
-    -DEXTRA_LIB="x265_main10.a;x265_main12.a" -DEXTRA_LINK_FLAGS=-L. -DLINKED_10BIT=ON -DLINKED_12BIT=ON
+    -DEXTRA_LIB="x265_main10.a;x265_main12.a" -DEXTRA_LINK_FLAGS=-L. -DLINKED_10BIT=ON -DLINKED_12BIT=ON \
+    -DENABLE_LIBNUMA=$([[ "$(uname)" == "Linux" ]] && echo "ON" || echo "OFF") -DNO_ATOMICS=ON
   cmake --build . --parallel $(nproc)
 
   mv libx265.a libx265_main.a
