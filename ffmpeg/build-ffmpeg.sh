@@ -638,7 +638,7 @@ function build_libx265() {
     -e '/if\(POLICY (CMP0025|CMP0054)\)/,/endif\(\)/d' \
     -e '/cmake_minimum_required \(VERSION 2\.8\.8\)/ s#2\.8\.8\)#2\.8\.8\.\.\.3\.10\)#' \
     -e '/if\(\$\{CMAKE_CXX_COMPILER_ID\} STREQUAL "Clang"\)/ s#\)$# OR \$\{CMAKE_CXX_COMPILER_ID\} STREQUAL "AppleClang"\)#' \
-    -e '/# compile ARM arch asm files here/,/elseif\(X86\)/ {
+    -e '/# compile ARM arch asm files here/,/elseif\(/ {
     /enable_language\(ASM\)/ {
       n
       /if\(APPLE\)/ b
