@@ -638,8 +638,16 @@ function build_libx265() {
     -e '/if\(POLICY (CMP0025|CMP0054)\)/,/endif\(\)/d' \
     -e '/cmake_minimum_required \(VERSION 2\.8\.8\)/ s#2\.8\.8\)#2\.8\.8\.\.\.3\.10\)#' \
     -e '/if\(\$\{CMAKE_CXX_COMPILER_ID\} STREQUAL "Clang"\)/ s#\)$# OR \$\{CMAKE_CXX_COMPILER_ID\} STREQUAL "AppleClang"\)#' \
-    -e '/# compile ARM arch asm files here/,/foreach\(ASM \$\{ARM_ASMS\}\)/ s#(.*enable_language\(ASM\))(.*)#\1\nif\(APPLE\)\nset\(ARM_ARGS \$\{ARM_ARGS\} -arch \$\{CMAKE_OSX_ARCHITECTURES\}\)\nendif\(\)\2#' \
-    "${PKG}/source/CMakeLists.txt"
+    -e '/# compile ARM arch asm files here/,/elseif\(X86\)/ {
+    /enable_language\(ASM\)/ {
+      n
+      /if\(APPLE\)/ b
+      i\
+        if(APPLE)\
+          set(ARM_ARGS ${ARM_ARGS} -arch ${CMAKE_OSX_ARCHITECTURES})\
+        endif()
+    }
+  }' "${PKG}/source/CMakeLists.txt"
 
   #https://github.com/rdp/ffmpeg-windows-build-helpers/issues/185
 
