@@ -647,16 +647,16 @@ function build_libx265() {
   change_clean_dir "${PKG}_build_12bits"
   PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}/source" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-    -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DSTATIC_LINK_CRT=ON -DEXPORT_C_API=OFF -DHIGH_BIT_DEPTH=ON -DMAIN12=ON \
-    -DENABLE_LIBNUMA=$([[ "$(uname)" == "Linux" ]] && echo "ON" || echo "OFF") -DNO_ATOMICS=ON
+    -DENABLE_TESTS=OFF -DENABLE_LIBNUMA=$([[ "$(uname)" == "Linux" ]] && echo "ON" || echo "OFF") \
+    -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DSTATIC_LINK_CRT=ON -DEXPORT_C_API=OFF -DHIGH_BIT_DEPTH=ON -DMAIN12=ON
   cmake --build . --parallel $(nproc) && cd ..
 
   ## second stage for 10-bit
   change_clean_dir "${PKG}_build_10bits"
   PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}/source" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-    -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DSTATIC_LINK_CRT=ON -DEXPORT_C_API=OFF -DHIGH_BIT_DEPTH=ON -DMAIN12=OFF \
-    -DENABLE_LIBNUMA=$([[ "$(uname)" == "Linux" ]] && echo "ON" || echo "OFF") -DNO_ATOMICS=ON
+    -DENABLE_TESTS=OFF -DENABLE_LIBNUMA=$([[ "$(uname)" == "Linux" ]] && echo "ON" || echo "OFF") \
+    -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DSTATIC_LINK_CRT=ON -DEXPORT_C_API=OFF -DHIGH_BIT_DEPTH=ON -DMAIN12=OFF
   cmake --build . --parallel $(nproc) && cd ..
 
   # final stage to merge 12-bit and 10-bit
@@ -666,8 +666,8 @@ function build_libx265() {
   PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" cmake "../${PKG}/source" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -G"Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="${ROOT_DIR}" -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DSTATIC_LINK_CRT=ON \
-    -DEXTRA_LIB="x265_main10.a;x265_main12.a" -DEXTRA_LINK_FLAGS=-L. -DLINKED_10BIT=ON -DLINKED_12BIT=ON \
-    -DENABLE_LIBNUMA=$([[ "$(uname)" == "Linux" ]] && echo "ON" || echo "OFF") -DNO_ATOMICS=ON
+    -DENABLE_TESTS=OFF -DENABLE_LIBNUMA=$([[ "$(uname)" == "Linux" ]] && echo "ON" || echo "OFF") \
+    -DEXTRA_LIB="x265_main10.a;x265_main12.a" -DEXTRA_LINK_FLAGS=-L. -DLINKED_10BIT=ON -DLINKED_12BIT=ON
   cmake --build . --parallel $(nproc)
 
   mv libx265.a libx265_main.a
