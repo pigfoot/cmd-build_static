@@ -461,7 +461,7 @@ function build_libass() {
 
   PKG_CONFIG_PATH="${ROOT_DIR}/lib/pkgconfig" meson setup "../${PKG}" \
     --prefix="${ROOT_DIR}" --libdir="${ROOT_DIR}/lib" --buildtype release --default-library=static \
-    -Dtest=false -Dfontconfig=enabled -Dlibunibreak=enabled -Dcoretext=disabled
+    -Dtest=disabled -Dfontconfig=enabled -Dlibunibreak=enabled -Dcoretext=disabled
   ninja -j$(nproc) install
 }
 
