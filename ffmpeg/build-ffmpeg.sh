@@ -112,7 +112,7 @@ function _get_tag() {
 
   enable_trace
 
-  tag_name="$(echo "${tag_verion_map%x}" | sed -En '/__'"${version}"'\.*$/ s#__.*##p')"
+  tag_name="$(echo "${tag_verion_map%x}" | sed -En '/__'"${version}"'\.*$/ s#__.*##p' | sed '1!d')"
 
   ## remove redundant dot, for example 4.1,4.1.. -> v4.1,4.1
   version=$(echo "${version}" | sed -E '/\.+$/ s###')
