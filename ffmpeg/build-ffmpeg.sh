@@ -735,7 +735,7 @@ function build_openssl() {
 
   "../${PKG}/Configure" --prefix="${ROOT_DIR}" --libdir="lib" \
     enable-tls1_3 enable-ktls \
-    no-shared no-autoload-config no-engine no-dso no-tests no-legacy no-deprecated
+    no-shared no-autoload-config no-engine no-dso no-tests no-legacy
   make -j$(nproc)
   make install_sw
 }
